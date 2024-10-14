@@ -7,7 +7,7 @@ readme = "README.md"
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.10"
 torch = "^2.4.1"
 transformers = "^4.45.2"
 datasets = "^3.0.1"
@@ -17,6 +17,8 @@ soundfile = "^0.12.1"
 numba = "^0.59.0"
 librosa = "^0.10.2.post1"
 evaluate = "^0.4.3"
+accelerate = "^1.0.1"
+jiwer = "^3.0.4"
 
 
 [tool.poetry.group.dev.dependencies]

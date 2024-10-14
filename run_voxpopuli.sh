@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# python -m torch.distributed.launch --nproc_per_node 8 run_speech_recognition_seq2seq.py \
+CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
+	--dataset_name="facebook/voxpopuli" \
+	--model_name_or_path="./seq2seq_wav2vec2_bart-base" \
+	--dataset_config_name="en" \
+	--train_split_name="train" \
+	--eval_split_name="validation" \
+	--output_dir="./seq2seq_wav2vec2_bart-base/training" \
+	--preprocessing_num_workers="32" \
+	--length_column_name="input_length" \
+	--overwrite_output_dir \
+	--num_train_epochs="2" \
+	--per_device_train_batch_size="32" \
+	--per_device_eval_batch_size="32" \
+	--gradient_accumulation_steps="1" \
+	--learning_rate="3e-4" \
+	--warmup_steps="150" \
+	--evaluation_strategy="steps" \
+	--text_column_name="normalized_text" \
+	--save_strategy="epoch" \
+	--eval_steps="400" \
+	--logging_steps="4" \
+	--save_total_limit="1" \
+    --freeze_feature_encoder \
+	--gradient_checkpointing \
+	--fp16 \
+    --seed="42" \
+    --task="transcribe" \
+	--group_by_length \
+	--predict_with_generate \
+	--do_train --do_eval \
+	--do_lower_case \
+    --trust_remote_code \
