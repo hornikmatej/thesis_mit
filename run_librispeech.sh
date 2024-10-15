@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # python -m torch.distributed.launch --nproc_per_node 8 run_speech_recognition_seq2seq.py \
 CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
-	--dataset_name="facebook/voxpopuli" \
+	--dataset_name="librispeech_asr" \
 	--model_name_or_path="./seq2seq_wav2vec2_bart-base" \
-	--dataset_config_name="en" \
-	--train_split_name="train" \
+	--dataset_config_name="clean" \
+	--train_split_name="train.100" \
 	--eval_split_name="validation" \
-	--output_dir="./seq2seq_wav2vec2_bart-base/training" \
+	--output_dir="./seq2seq_wav2vec2_bart-base/training_librespeech" \
 	--preprocessing_num_workers="8" \
 	--length_column_name="input_length" \
 	--overwrite_output_dir \
@@ -14,16 +14,16 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--per_device_train_batch_size="128" \
 	--per_device_eval_batch_size="128" \
 	--gradient_accumulation_steps="1" \
-	--learning_rate="4e-6" \
-	--warmup_steps="1000" \
+	--learning_rate="1e-4" \
+	--warmup_steps="200" \
 	--evaluation_strategy="steps" \
-	--text_column_name="normalized_text" \
+	--text_column_name="text" \
 	--save_strategy="epoch" \
-	--eval_steps="1000" \
-	--logging_steps="10" \
+	--eval_steps="200" \
+	--logging_steps="5" \
 	--save_total_limit="1" \
     --freeze_feature_encoder \
-    --gradient_checkpointing \
+	--gradient_checkpointing \
 	--bf16 \
     --seed="42" \
     --task="transcribe" \
@@ -33,4 +33,3 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--do_lower_case \
     --trust_remote_code \
     --report_to="wandb" \
-    --max_grad_norm="0.25" \

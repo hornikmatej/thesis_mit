@@ -10,16 +10,17 @@
 # 0. Go to the repository root
 cd /storage/brno2/home/xhorni20/dp_mit
 
-# Use $SCRATCHDIR for hf cache
-# export HF_HOME=$SCRATCHDIR/.cache/huggingface
-
-export HF_HOME=/storage/brno2/home/xhorni20/.cache/huggingface
 
 # 1. Open an interactive Singularity shell and execute the commands
-singularity shell --nv /cvmfs/singularity.metacentrum.cz/NGC/PyTorch:24.04-py3.SIF <<EOF
-    python -m pip install poetry
-    python -m poetry install
-EOF
+singularity shell --nv /cvmfs/singularity.metacentrum.cz/NGC/PyTorch:24.04-py3.SIF
+
+# Use $SCRATCHDIR for hf cache
+export HF_HOME=$SCRATCHDIR/.cache/huggingface
+# export HF_HOME=/storage/brno2/home/xhorni20/.cache/huggingface
+
+# TODO: doesnt work all in one script
+python -m pip install poetry
+python -m poetry install
 
 # #!/bin/bash
 # # Make sure install_poetry.sh is executable
