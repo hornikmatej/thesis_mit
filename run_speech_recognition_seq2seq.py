@@ -59,7 +59,6 @@ settings = get_settings()
 WANDB_KEY = settings.wandb_token.get_secret_value()
 WANDB_PROJECT = "seq2seq_encoder-decoder"
 wandb.login(key=WANDB_KEY)
-run = wandb.init(project=WANDB_PROJECT, job_type="training", anonymous="allow")
 
 
 logger = logging.getLogger(__name__)
@@ -139,6 +138,13 @@ def main():
 
     # add wandb run name to training_args
     training_args.run_name = f"{data_args.dataset_name}_{data_args.dataset_config_name}_wav2vec2-bart_bs{training_args.per_device_train_batch_size}_lr{training_args.learning_rate}_ep{training_args.num_train_epochs}"
+
+    run = wandb.init(
+        project=WANDB_PROJECT,
+        job_type="training",
+        anonymous="allow",
+        name=training_args.run_name,
+    )
 
     # 2. Setup logging
     logging.basicConfig(
