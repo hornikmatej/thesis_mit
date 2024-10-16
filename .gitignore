@@ -157,3 +157,6 @@ cython_debug/
 
 # wandb
 wandb/
+
+# model directory + training checkpoints
+seq2seq_wav2vec2_bart-base/

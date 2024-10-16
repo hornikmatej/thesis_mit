@@ -7,14 +7,14 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--train_split_name="train" \
 	--eval_split_name="validation" \
 	--output_dir="./seq2seq_wav2vec2_bart-base/training" \
-	--preprocessing_num_workers="8" \
+	--preprocessing_num_workers="16" \
 	--length_column_name="input_length" \
 	--overwrite_output_dir \
-	--num_train_epochs="5" \
+	--num_train_epochs="6" \
 	--per_device_train_batch_size="128" \
 	--per_device_eval_batch_size="128" \
 	--gradient_accumulation_steps="1" \
-	--learning_rate="4e-6" \
+	--learning_rate="3e-4" \
 	--warmup_steps="1000" \
 	--evaluation_strategy="steps" \
 	--text_column_name="normalized_text" \
@@ -25,7 +25,6 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
     --freeze_feature_encoder \
     --gradient_checkpointing \
 	--bf16 \
-    --seed="42" \
     --task="transcribe" \
 	--group_by_length \
 	--predict_with_generate \
@@ -33,4 +32,3 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--do_lower_case \
     --trust_remote_code \
     --report_to="wandb" \
-    --max_grad_norm="0.25" \
