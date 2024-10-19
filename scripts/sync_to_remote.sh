@@ -6,7 +6,7 @@ LOCAL_DIR="dp_mit"
 REMOTE_USER="xhorni20"
 REMOTE_HOST="skirit.ics.muni.cz"
 REMOTE_DIR="/storage/brno2/home/xhorni20/dp_mit"
-EXCLUDES=(".venv" "wandb" "__pycache__" ".git" "seq2seq_wav2vec2_bart-base")
+EXCLUDES=(".venv" "wandb" "__pycache__" ".git" "seq2seq_wav2vec2_bart-base" "SCTK")
 
 # Construct the rsync exclude options
 EXCLUDE_OPTS=""

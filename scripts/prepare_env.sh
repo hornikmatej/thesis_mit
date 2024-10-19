@@ -22,16 +22,5 @@ export HF_HOME=$SCRATCHDIR/.cache/huggingface
 python -m pip install poetry
 python -m poetry install
 
-# #!/bin/bash
-# # Make sure install_poetry.sh is executable
-# chmod +x install_poetry.sh
 
-# # Open an interactive Singularity shell and execute the script
-# singularity shell --nv /cvmfs/singularity.metacentrum.cz/NGC/PyTorch:24.04-py3.SIF <<EOF
-#     ./install_poetry.sh
-#     exec bash
-# EOF
-
-# #!/bin/bash
-# python -m pip install poetry
-# python -m poetry install
+# ./bin/sclite -r demo.ref.txt -h demo.hyp.txt -i spu_id -o sum pra stdout  

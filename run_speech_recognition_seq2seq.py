@@ -29,6 +29,7 @@ import datasets
 import evaluate
 import torch
 import wandb
+import numpy as np
 from datasets import DatasetDict, load_dataset
 
 import transformers
@@ -505,11 +506,40 @@ def main():
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-        metrics = trainer.evaluate(
+
+        # Predict to get the raw output
+        predictions, labels, metrics = trainer.predict(
+            test_dataset=vectorized_datasets["eval"],
             metric_key_prefix="eval",
             max_length=training_args.generation_max_length,
             num_beams=training_args.generation_num_beams,
         )
+
+        # Post-process predictions and labels
+        predictions = np.argmax(predictions, axis=-1)  # If logits, decode with argmax
+
+        # Replace -100 in labels as it’s used to ignore tokens in some tasks
+        labels[labels == -100] = tokenizer.pad_token_id
+
+        # Decode the predictions and labels into text
+        pred_str = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+        label_str = tokenizer.batch_decode(labels, skip_special_tokens=True)
+
+        # Save predictions to a file
+        output_prediction_file = os.path.join(training_args.output_dir, "pred.txt")
+        with open(output_prediction_file, "w") as writer:
+            logger.info("***** Saving predictions *****")
+            for i, pred in enumerate(pred_str, start=1):
+                writer.write(f"{pred} (speaker-utterance{i})\n")
+
+        # Save references to a file
+        output_reference_file = os.path.join(training_args.output_dir, "ref.txt")
+        with open(output_reference_file, "w") as writer:
+            logger.info("***** Saving references *****")
+            for i, label in enumerate(label_str, start=1):
+                writer.write(f"{label} (speaker-utterance{i})\n")
+
+        # Log metrics as usual
         max_eval_samples = (
             data_args.max_eval_samples
             if data_args.max_eval_samples is not None

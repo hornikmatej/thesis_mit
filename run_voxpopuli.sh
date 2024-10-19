@@ -11,9 +11,9 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--length_column_name="input_length" \
 	--overwrite_output_dir \
 	--num_train_epochs="6" \
-	--per_device_train_batch_size="128" \
-	--per_device_eval_batch_size="128" \
-	--gradient_accumulation_steps="1" \
+	--per_device_train_batch_size="64" \
+	--per_device_eval_batch_size="64" \
+	--gradient_accumulation_steps="2" \
 	--learning_rate="3e-4" \
 	--warmup_steps="1000" \
 	--evaluation_strategy="steps" \
@@ -23,7 +23,6 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--logging_steps="10" \
 	--save_total_limit="1" \
     --freeze_feature_encoder \
-    --gradient_checkpointing \
 	--bf16 \
     --task="transcribe" \
 	--group_by_length \
