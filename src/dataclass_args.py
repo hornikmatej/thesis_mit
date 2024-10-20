@@ -210,3 +210,9 @@ class DataTrainingArguments:
             "help": "Task, either `transcribe` for speech recognition or `translate` for speech translation."
         },
     )
+    streaming: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to use streaming inference for downloading dataset."
+        },
+    )

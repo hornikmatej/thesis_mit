@@ -210,7 +210,10 @@ def main():
             cache_dir=model_args.cache_dir,
             token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
-            num_proc=data_args.preprocessing_num_workers,
+            num_proc=(
+                data_args.preprocessing_num_workers if not data_args.streaming else None
+            ),
+            streaming=data_args.streaming,
         )
 
     if training_args.do_eval:
@@ -221,7 +224,10 @@ def main():
             cache_dir=model_args.cache_dir,
             token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
-            num_proc=data_args.preprocessing_num_workers,
+            num_proc=(
+                data_args.preprocessing_num_workers if not data_args.streaming else None
+            ),
+            streaming=data_args.streaming,
         )
 
     if (
@@ -369,15 +375,23 @@ def main():
         and getattr(config, "mask_time_prob", 0) > 0
     )
 
-    if data_args.max_train_samples is not None:
-        raw_datasets["train"] = raw_datasets["train"].select(
-            range(data_args.max_train_samples)
-        )
+    if data_args.max_train_samples is not None and training_args.do_train:
+        if data_args.streaming:
+            raw_datasets["train"] = raw_datasets["train"].take(
+                data_args.max_train_samples
+            )
+        else:
+            raw_datasets["train"] = raw_datasets["train"].select(
+                range(data_args.max_train_samples)
+            )
 
-    if data_args.max_eval_samples is not None:
-        raw_datasets["eval"] = raw_datasets["eval"].select(
-            range(data_args.max_eval_samples)
-        )
+    if data_args.max_eval_samples is not None and training_args.do_eval:
+        if data_args.streaming:
+            raw_datasets["eval"] = raw_datasets["eval"].take(data_args.max_eval_samples)
+        else:
+            raw_datasets["eval"] = raw_datasets["eval"].select(
+                range(data_args.max_eval_samples)
+            )
 
     def prepare_dataset(batch):
         # process audio
@@ -402,24 +416,56 @@ def main():
         batch["labels"] = tokenizer(input_str).input_ids
         return batch
 
+    vectorized_datasets = DatasetDict()
     with training_args.main_process_first(desc="dataset map pre-processing"):
-        vectorized_datasets = raw_datasets.map(
-            prepare_dataset,
-            remove_columns=next(iter(raw_datasets.values())).column_names,
-            num_proc=data_args.preprocessing_num_workers,
-            desc="preprocess train dataset",
-        )
+        if training_args.do_train:
+            if data_args.streaming:
+                vectorized_datasets["train"] = raw_datasets["train"].map(
+                    prepare_dataset,
+                    remove_columns=raw_datasets["train"].column_names,
+                )
+            else:
+                vectorized_datasets["train"] = raw_datasets["train"].map(
+                    prepare_dataset,
+                    remove_columns=raw_datasets["train"].column_names,
+                    num_proc=data_args.preprocessing_num_workers,
+                    desc="preprocess train dataset ",
+                )
+
+        if training_args.do_eval:
+            if data_args.streaming:
+                vectorized_datasets["eval"] = raw_datasets["eval"].map(
+                    prepare_dataset,
+                    remove_columns=raw_datasets["eval"].column_names,
+                )
+            else:
+                vectorized_datasets["eval"] = raw_datasets["eval"].map(
+                    prepare_dataset,
+                    remove_columns=raw_datasets["eval"].column_names,
+                    num_proc=data_args.preprocessing_num_workers,
+                    desc="preprocess eval dataset",
+                )
 
     # filter data that is shorter than min_input_length or longer than
     # max_input_length
     def is_audio_in_length_range(length):
         return length > min_input_length and length < max_input_length
 
-    vectorized_datasets = vectorized_datasets.filter(
-        is_audio_in_length_range,
-        num_proc=num_workers,
-        input_columns=["input_length"],
-    )
+    if data_args.streaming:
+        if training_args.do_train:
+            vectorized_datasets["train"] = vectorized_datasets["train"].filter(
+                is_audio_in_length_range, input_columns=["input_length"]
+            )
+        if training_args.do_eval:
+            vectorized_datasets["eval"] = vectorized_datasets["eval"].filter(
+                is_audio_in_length_range, input_columns=["input_length"]
+            )
+    else:
+        vectorized_datasets = vectorized_datasets.filter(
+            is_audio_in_length_range,
+            num_proc=num_workers,
+            input_columns=["input_length"],
+        )
 
     # for large datasets it is advised to run the preprocessing on a
     # single machine first with `args.preprocessing_only` since there will mostly likely
@@ -515,9 +561,6 @@ def main():
             num_beams=training_args.generation_num_beams,
         )
 
-        # Post-process predictions and labels
-        predictions = np.argmax(predictions, axis=-1)  # If logits, decode with argmax
-
         # Replace -100 in labels as it’s used to ignore tokens in some tasks
         labels[labels == -100] = tokenizer.pad_token_id
 
@@ -528,14 +571,14 @@ def main():
         # Save predictions to a file
         output_prediction_file = os.path.join(training_args.output_dir, "pred.txt")
         with open(output_prediction_file, "w") as writer:
-            logger.info("***** Saving predictions *****")
+            logger.info(f"***** Saving predictions *****, to {output_prediction_file}")
             for i, pred in enumerate(pred_str, start=1):
                 writer.write(f"{pred} (speaker-utterance{i})\n")
 
         # Save references to a file
         output_reference_file = os.path.join(training_args.output_dir, "ref.txt")
         with open(output_reference_file, "w") as writer:
-            logger.info("***** Saving references *****")
+            logger.info(f"***** Saving references *****, to {output_reference_file}")
             for i, label in enumerate(label_str, start=1):
                 writer.write(f"{label} (speaker-utterance{i})\n")
 
@@ -545,9 +588,10 @@ def main():
             if data_args.max_eval_samples is not None
             else len(vectorized_datasets["eval"])
         )
-        metrics["eval_samples"] = min(
-            max_eval_samples, len(vectorized_datasets["eval"])
-        )
+        if not data_args.streaming:
+            metrics["eval_samples"] = min(
+                max_eval_samples, len(vectorized_datasets["eval"])
+            )
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
