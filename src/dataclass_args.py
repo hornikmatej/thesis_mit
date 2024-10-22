@@ -216,3 +216,7 @@ class DataTrainingArguments:
             "help": "Whether to use streaming inference for downloading dataset."
         },
     )
+    sclite_path: str = field(
+        default="/home/matej/fitvut/dp_mit/SCTK/bin/sclite",
+        metadata={"help": "Path to the SCLITE executable"},
+    )

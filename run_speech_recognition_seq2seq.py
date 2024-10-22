@@ -16,23 +16,15 @@
 """
 Fine-tuning the library models for sequence to sequence speech recognition.
 """
-# You can also adapt this script on your own sequence to sequence speech
-# recognition task. Pointers for this are left as comments.
 
 import logging
 import os
-import sys
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
 
 import datasets
 import evaluate
-import torch
 import wandb
-import numpy as np
 from datasets import DatasetDict, load_dataset
 
-import transformers
 from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
@@ -40,140 +32,49 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     HfArgumentParser,
-    Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
-from transformers.utils.versions import require_version
 
 from config import get_settings
 from src.dataclass_args import ModelArguments, DataTrainingArguments
+from src.custom_trainer import DebugSeq2SeqTrainer
+from src.data_collator import DataCollatorSpeechSeq2SeqWithPadding
+from src.logger_setup import setup_logger
 
 check_min_version("4.45.0")
-
-
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 # Monitoring
 WANDB_KEY = settings.wandb_token.get_secret_value()
 WANDB_PROJECT = "seq2seq_encoder-decoder"
-wandb.login(key=WANDB_KEY)
-
-
-logger = logging.getLogger(__name__)
-
-
-@dataclass
-class DataCollatorSpeechSeq2SeqWithPadding:
-    """
-    Data collator that will dynamically pad the inputs received.
-    Args:
-        processor ([`WhisperProcessor`])
-            The processor used for processing the data.
-        decoder_start_token_id (`int`)
-            The begin-of-sentence of the decoder.
-        forward_attention_mask (`bool`)
-            Whether to return attention_mask.
-    """
-
-    processor: Any
-    decoder_start_token_id: int
-    forward_attention_mask: bool
-
-    def __call__(
-        self, features: List[Dict[str, Union[List[int], torch.Tensor]]]
-    ) -> Dict[str, torch.Tensor]:
-        # split inputs and labels since they have to be of different lengths and need
-        # different padding methods
-        model_input_name = self.processor.model_input_names[0]
-        input_features = [
-            {model_input_name: feature[model_input_name]} for feature in features
-        ]
-        label_features = [{"input_ids": feature["labels"]} for feature in features]
-
-        batch = self.processor.feature_extractor.pad(
-            input_features, return_tensors="pt"
-        )
-
-        if self.forward_attention_mask:
-            batch["attention_mask"] = torch.LongTensor(
-                [feature["attention_mask"] for feature in features]
-            )
-
-        labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="pt")
-
-        # replace padding with -100 to ignore loss correctly
-        labels = labels_batch["input_ids"].masked_fill(
-            labels_batch.attention_mask.ne(1), -100
-        )
-
-        # if bos token is appended in previous tokenization step,
-        # cut bos token here as it's append later anyways
-        if (labels[:, 0] == self.decoder_start_token_id).all().cpu().item():
-            labels = labels[:, 1:]
-
-        batch["labels"] = labels
-
-        return batch
 
 
 def main():
     # 1. Parse input arguments
-    # See all possible arguments in src/transformers/training_args.py
-    # or by passing the --help flag to this script.
-    # We now keep distinct sets of args, for a cleaner separation of concerns.
     parser = HfArgumentParser(
         (ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments)
     )
-
-    if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
-        # If we pass only one argument to the script and it's the path to a json file,
-        # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(
-            json_file=os.path.abspath(sys.argv[1])
-        )
-    else:
-        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # add wandb run name to training_args
     training_args.run_name = f"{data_args.dataset_name}_{data_args.dataset_config_name}_wav2vec2-bart_bs{training_args.per_device_train_batch_size}_lr{training_args.learning_rate}_ep{training_args.num_train_epochs}"
 
-    run = wandb.init(
-        project=WANDB_PROJECT,
-        job_type="training",
-        anonymous="allow",
-        name=training_args.run_name,
-    )
+    run: wandb.Run = None
+    if "wandb" in training_args.report_to:
+        wandb.login(key=WANDB_KEY)
+        run = wandb.init(
+            project=WANDB_PROJECT,
+            job_type="training",
+            anonymous="allow",
+            name=training_args.run_name,
+        )
 
     # 2. Setup logging
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
-    log_level = training_args.get_process_log_level()
-    logger.setLevel(log_level)
-    datasets.utils.logging.set_verbosity(log_level)
-    transformers.utils.logging.set_verbosity(log_level)
-    transformers.utils.logging.enable_default_handler()
-    transformers.utils.logging.enable_explicit_format()
-
-    logger.setLevel(
-        logging.INFO if is_main_process(training_args.local_rank) else logging.WARN
-    )
-
-    # Log on each process the small summary:
-    logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
-        f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
-    )
-
-    # Set the verbosity to info of the Transformers logger (on main process only):
-    if is_main_process(training_args.local_rank):
-        transformers.utils.logging.set_verbosity_info()
-    logger.info("Training/evaluation parameters %s", training_args)
+    setup_logger(training_args)
 
     # 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
@@ -510,10 +411,12 @@ def main():
         processor=processor,
         decoder_start_token_id=model.config.decoder_start_token_id,
         forward_attention_mask=forward_attention_mask,
+        debug_output_dir=os.path.join(training_args.output_dir, "debug"),
+        sclite_path=data_args.sclite_path,
     )
 
     # 11. Initialize Trainer
-    trainer = Seq2SeqTrainer(
+    trainer = DebugSeq2SeqTrainer(
         model=model,
         args=training_args,
         train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
@@ -523,6 +426,8 @@ def main():
         compute_metrics=(
             compute_metrics if training_args.predict_with_generate else None
         ),
+        debug_dir=os.path.join(training_args.output_dir, "debug"),
+        actual_tokenizer=tokenizer,
     )
 
     # 12. Training
@@ -553,34 +458,11 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
-        # Predict to get the raw output
-        predictions, labels, metrics = trainer.predict(
-            test_dataset=vectorized_datasets["eval"],
+        metrics = trainer.evaluate(
             metric_key_prefix="eval",
             max_length=training_args.generation_max_length,
             num_beams=training_args.generation_num_beams,
         )
-
-        # Replace -100 in labels as it’s used to ignore tokens in some tasks
-        labels[labels == -100] = tokenizer.pad_token_id
-
-        # Decode the predictions and labels into text
-        pred_str = tokenizer.batch_decode(predictions, skip_special_tokens=True)
-        label_str = tokenizer.batch_decode(labels, skip_special_tokens=True)
-
-        # Save predictions to a file
-        output_prediction_file = os.path.join(training_args.output_dir, "pred.txt")
-        with open(output_prediction_file, "w") as writer:
-            logger.info(f"***** Saving predictions *****, to {output_prediction_file}")
-            for i, pred in enumerate(pred_str, start=1):
-                writer.write(f"{pred} (speaker-utterance{i})\n")
-
-        # Save references to a file
-        output_reference_file = os.path.join(training_args.output_dir, "ref.txt")
-        with open(output_reference_file, "w") as writer:
-            logger.info(f"***** Saving references *****, to {output_reference_file}")
-            for i, label in enumerate(label_str, start=1):
-                writer.write(f"{label} (speaker-utterance{i})\n")
 
         # Log metrics as usual
         max_eval_samples = (
@@ -616,7 +498,9 @@ def main():
     else:
         trainer.create_model_card(**kwargs)
 
-    wandb.finish()
+    if "wandb" in training_args.report_to:
+        wandb.finish()
+
     return results
 
 

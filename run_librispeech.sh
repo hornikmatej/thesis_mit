@@ -31,6 +31,7 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--do_lower_case \
     --trust_remote_code \
     --report_to="wandb" \
+	--sclite_path="/storage/brno2/home/xhorni20/dp_mit/SCTK/bin/sclite"
 
 ## REFERENCE:
 	# --dataset_name="librispeech_asr" \
