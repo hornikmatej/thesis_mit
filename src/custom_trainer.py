@@ -63,7 +63,7 @@ class DebugSeq2SeqTrainer(Seq2SeqTrainer):
         # Also log to W&B
         # Works only if wandb is enabled
         if self.is_world_process_zero():
-            write_wandb_pred(pred_str, label_str)
+            write_wandb_pred(pred_str, label_str, self.state.global_step)
 
         # Run debug analysis using the data collator
         if hasattr(self.data_collator, "save_debug_info"):

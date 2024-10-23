@@ -2,8 +2,9 @@ from typing import List
 import wandb
 
 
-def write_wandb_pred(pred_str: List[str], label_str: List[str], rows_to_log: int = 20):
-    current_step = wandb.run.step
+def write_wandb_pred(
+    pred_str: List[str], label_str: List[str], current_step: int, rows_to_log: int = 20
+):
     columns = ["id", "label_str", "hyp_str"]
     wandb.log(
         {
