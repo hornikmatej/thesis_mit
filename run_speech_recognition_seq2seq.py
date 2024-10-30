@@ -36,7 +36,6 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
-from transformers.utils import check_min_version
 
 from config import get_settings
 from src.dataclass_args import ModelArguments, DataTrainingArguments
@@ -44,7 +43,6 @@ from src.custom_trainer import DebugSeq2SeqTrainer
 from src.data_collator import DataCollatorSpeechSeq2SeqWithPadding
 from src.logger_setup import setup_logger
 
-check_min_version("4.45.0")
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
