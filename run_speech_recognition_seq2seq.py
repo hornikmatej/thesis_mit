@@ -23,8 +23,8 @@ import os
 import datasets
 import evaluate
 import wandb
-from datasets import DatasetDict, load_dataset
 
+from datasets import DatasetDict, load_dataset
 from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
@@ -61,19 +61,19 @@ def main():
     # add wandb run name to training_args
     training_args.run_name = f"{data_args.dataset_name}_{data_args.dataset_config_name}_wav2vec2-bart_bs{training_args.per_device_train_batch_size}_lr{training_args.learning_rate}_ep{training_args.num_train_epochs}"
 
-    run: wandb.Run = None
-    if "wandb" in training_args.report_to:
-        wandb.login(key=WANDB_KEY)
-        run = wandb.init(
-            project=WANDB_PROJECT,
-            job_type="training",
-            anonymous="allow",
-            name=training_args.run_name,
-        )
-
     # 2. Setup logging
-    setup_logger(training_args)
+    log_level = setup_logger(training_args)
 
+    if log_level != logging.DEBUG:
+        run: wandb.Run = None
+        if "wandb" in training_args.report_to:
+            wandb.login(key=WANDB_KEY)
+            run = wandb.init(
+                project=WANDB_PROJECT,
+                job_type="training",
+                anonymous="allow",
+                name=training_args.run_name,
+            )
     # 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
     if (
@@ -90,7 +90,7 @@ def main():
         elif (
             last_checkpoint is not None and training_args.resume_from_checkpoint is None
         ):
-            logger.info(
+            logger.warning(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
@@ -313,6 +313,8 @@ def main():
             else batch[text_column_name]
         )
         batch["labels"] = tokenizer(input_str).input_ids
+        if log_level == logging.DEBUG:
+            logger.debug(f"Batch: {batch}")
         return batch
 
     vectorized_datasets = DatasetDict()
@@ -409,6 +411,7 @@ def main():
         processor=processor,
         decoder_start_token_id=model.config.decoder_start_token_id,
         forward_attention_mask=forward_attention_mask,
+        log_level=training_args.get_process_log_level(),
         debug_output_dir=os.path.join(training_args.output_dir, "debug"),
         sclite_path=data_args.sclite_path,
     )

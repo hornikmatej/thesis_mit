@@ -1,9 +1,11 @@
-import pandas as pd
+from typing import List, Dict, Union, Any
 import os
 import subprocess
 import logging
-from typing import List, Dict, Union, Any
+
 import torch
+import pandas as pd
+import numpy as np
 
 logger_collator = logging.getLogger(__name__)
 
@@ -25,6 +27,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         processor: Any,
         decoder_start_token_id: int,
         forward_attention_mask: bool,
+        log_level: int,
         debug_output_dir: str = "debug_output",
         sclite_path: str = "/home/matej/fitvut/dp_mit/SCTK/bin/sclite",
     ):
@@ -33,7 +36,8 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         self.forward_attention_mask = forward_attention_mask
         self.debug_output_dir = debug_output_dir
         self.sclite_path = sclite_path
-
+        self.sample_counter = 0
+        self.log_level = log_level
         # Create debug output directory if it doesn't exist
         os.makedirs(debug_output_dir, exist_ok=True)
 
@@ -46,6 +50,12 @@ class DataCollatorSpeechSeq2SeqWithPadding:
             {model_input_name: feature[model_input_name]} for feature in features
         ]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
+
+        if self.log_level == logging.DEBUG:
+            if not self.validate_input_features(input_features):
+                raise ValueError("Invalid input features")
+            if not self.validate_labels(label_features):
+                raise ValueError("Invalid label features")
 
         batch = self.processor.feature_extractor.pad(
             input_features, return_tensors="pt"
@@ -68,7 +78,95 @@ class DataCollatorSpeechSeq2SeqWithPadding:
 
         batch["labels"] = labels
 
+        if self.log_level == logging.DEBUG:
+            debug_info = self.debug_sample(batch, features, every_n_batches=100)
+            logger_collator.warning(f"Debug info: {debug_info}")
+
         return batch
+
+    def validate_input_features(self, input_features):
+        """Validate input features"""
+        if not input_features:
+            logger_collator.error("Empty input features!")
+            return False
+
+        for feat in input_features:
+            if self.processor.model_input_names[0] not in feat:
+                logger_collator.error(
+                    f"Missing {self.processor.model_input_names[0]} in input features"
+                )
+                return False
+
+            input_values = feat[self.processor.model_input_names[0]]
+            if not isinstance(input_values, (np.ndarray, list)):
+                logger_collator.error(
+                    f"Invalid input_values type: {type(input_values)}"
+                )
+                return False
+
+            # Check for NaN or infinity values
+            if isinstance(input_values, np.ndarray) and (
+                np.isnan(input_values).any() or np.isinf(input_values).any()
+            ):
+                logger_collator.error("Found NaN or infinity values in input_values")
+                return False
+
+        return True
+
+    def validate_labels(self, label_features):
+        """Validate label features"""
+        if not label_features:
+            logger_collator.error("Empty label features!")
+            return False
+
+        for feat in label_features:
+            if "input_ids" not in feat:
+                logger_collator.error("Missing input_ids in label features")
+                return False
+
+            if not isinstance(feat["input_ids"], (list, np.ndarray)):
+                logger_collator.error(f"Invalid labels type: {type(feat['input_ids'])}")
+                return False
+
+        return True
+
+    def debug_sample(self, batch, features, every_n_batches=100):
+        """Save detailed debug information for a batch"""
+        if self.sample_counter % every_n_batches == 0:  # Debug every 100th batch
+            debug_info = {
+                "batch_size": len(features),
+                "input_shape": batch["input_values"].shape,
+                "label_shape": batch["labels"].shape,
+                "input_stats": {
+                    "mean": batch["input_values"].float().mean().item(),
+                    "std": batch["input_values"].float().std().item(),
+                    "min": batch["input_values"].float().min().item(),
+                    "max": batch["input_values"].float().max().item(),
+                },
+                "label_stats": {
+                    "sequence_lengths": (batch["labels"] != -100).sum(1).tolist(),
+                    "unique_tokens": len(
+                        torch.unique(batch["labels"][batch["labels"] != -100])
+                    ),
+                },
+                "memory_usage": {
+                    "input_values_mb": batch["input_values"].element_size()
+                    * batch["input_values"].nelement()
+                    / (1024 * 1024),
+                    "labels_mb": batch["labels"].element_size()
+                    * batch["labels"].nelement()
+                    / (1024 * 1024),
+                },
+            }
+
+            # Decode a sample of labels to check tokenization
+            if hasattr(self.processor, "tokenizer"):
+                sample_labels = batch["labels"][0][batch["labels"][0] != -100]
+                decoded_text = self.processor.tokenizer.decode(sample_labels)
+                logger_collator.info(f"Sample decoded text: {decoded_text}")
+
+        self.sample_counter += 1
+        return debug_info if self.sample_counter % every_n_batches == 0 else None
 
     def save_debug_info(
         self, pred_str: List[str], label_str: List[str], batch_idx: int = 0

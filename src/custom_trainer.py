@@ -61,8 +61,7 @@ class DebugSeq2SeqTrainer(Seq2SeqTrainer):
         label_str = self.actual_tokenizer.batch_decode(labels, skip_special_tokens=True)
 
         # Also log to W&B
-        # Works only if wandb is enabled
-        if self.is_world_process_zero():
+        if self.is_world_process_zero() and self.args.report_to == "wandb":
             write_wandb_pred(pred_str, label_str, self.state.global_step)
 
         # Run debug analysis using the data collator

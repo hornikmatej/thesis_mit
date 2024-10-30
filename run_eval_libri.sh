@@ -33,5 +33,5 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--do_lower_case \
     --streaming \
     --trust_remote_code \
-	--report_to="wandb" \
+	--log_level="debug" \
 	--sclite_path="/home/matej/fitvut/dp_mit/SCTK/bin/sclite" \
