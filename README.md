@@ -4,11 +4,9 @@
 - **Supervisor**: [Ing. Alexander Polok](ipoloka@fit.vut.cz)
 
 ### TODO's
-- [X] SCTK Toolkit
 - [ ] Automatic submit script
 - [ ] Train CTC
 - [ ] Train CTC with adapter
-- [ ] Text mind map
 - [ ] Stable training conversion for seq2seq
 
 
