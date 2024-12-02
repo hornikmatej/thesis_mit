@@ -24,6 +24,7 @@ wandb = "^0.18.3"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
+matplotlib = "^3.9.3"
 
 [build-system]
 requires = ["poetry-core"]

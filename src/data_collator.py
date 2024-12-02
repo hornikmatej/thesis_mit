@@ -6,6 +6,8 @@ import logging
 import torch
 import pandas as pd
 import numpy as np
+import io
+import soundfile as sf
 
 logger_collator = logging.getLogger(__name__)
 
@@ -82,6 +84,28 @@ class DataCollatorSpeechSeq2SeqWithPadding:
             debug_info = self.debug_sample(batch, features, every_n_batches=100)
             logger_collator.warning(f"Debug info: {debug_info}")
 
+        # Save the audio sample for debugging
+        audio_path = os.path.join(
+            self.debug_output_dir, f"debug_sample_{self.sample_counter}.mp3"
+        )
+        os.makedirs(os.path.dirname(audio_path), exist_ok=True)
+        if self.log_level == logging.DEBUG:
+            with io.BytesIO() as buffer:
+                logger_collator.debug(f"{batch=}")
+                sf.write(buffer, batch["input_values"][0], 16000, format="MP3")
+                with open(audio_path, "wb") as f:
+                    f.write(buffer.getvalue())
+                # Save the decoded text for debugging
+                decoded_text_path = os.path.join(
+                    self.debug_output_dir, f"decoded_text_{self.sample_counter}.txt"
+                )
+                with open(decoded_text_path, "w") as f:
+                    sample_labels = batch["labels"][0][batch["labels"][0] != -100]
+                    decoded_text = self.processor.tokenizer.decode(sample_labels)
+                    f.write(decoded_text)
+                logger_collator.debug(
+                    f"Saving sample audio to {audio_path} and decoded text to {decoded_text_path}"
+                )
         return batch
 
     def validate_input_features(self, input_features):

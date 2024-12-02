@@ -42,6 +42,8 @@ from src.dataclass_args import ModelArguments, DataTrainingArguments
 from src.custom_trainer import DebugSeq2SeqTrainer
 from src.data_collator import DataCollatorSpeechSeq2SeqWithPadding
 from src.logger_setup import setup_logger
+import soundfile as sf
+import io
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -314,7 +316,58 @@ def main():
         )
         batch["labels"] = tokenizer(input_str).input_ids
         if log_level == logging.DEBUG:
+            logger.debug("------ MODEL CONFIG ------")
+            logger.debug(f"{model.config.decoder_start_token_id=}")
+            logger.debug(f"{model.config.pad_token_id=}")
+            logger.debug(f"{model.config.eos_token_id=}")
+            logger.debug(f"Original audio array length: {len(sample['array'])}")
+            logger.debug(f"Audio array start: {sample['array'][:10]}")
+            # Log feature extraction details
+            logger.debug(
+                f"Extracted features length: {len(inputs.get(model_input_name)[0])}"
+            )
+            logger.debug(
+                f"Extracted features start: {inputs.get(model_input_name)[0][:10]}"
+            )
+            tokens = tokenizer(input_str)
+            logger.debug(f"Original text: {input_str}")
+            logger.debug(f"Tokenized input_ids: {tokens.input_ids}")
+            logger.debug(f"Decoded tokens: {tokenizer.decode(tokens.input_ids)}")
+            logger.debug("------ Debugging ------")
+            logger.debug(f"Sample: {sample}")
+            logger.debug(f"After ft_extractor: {inputs}")
             logger.debug(f"Batch: {batch}")
+            logger.debug(f"Model input name: {model_input_name}")
+            logger.debug(f"Start decoder token: {model.config.decoder_start_token_id}")
+            logger.debug("------ END Debugging ------")
+            # Save the audio sample for debugging
+            audio_path = os.path.join(
+                training_args.output_dir, "debug", f"{batch['id']}.mp3"
+            )
+            os.makedirs(os.path.dirname(audio_path), exist_ok=True)
+            with io.BytesIO() as buffer:
+                sf.write(
+                    buffer,
+                    batch["input_values"],
+                    batch["audio"]["sampling_rate"],
+                    format="MP3",
+                )
+                with open(audio_path, "wb") as f:
+                    f.write(buffer.getvalue())
+            # save also from feature extractor
+            audio_path = os.path.join(
+                training_args.output_dir, "debug", f"{batch['id']}_orig.mp3"
+            )
+            os.makedirs(os.path.dirname(audio_path), exist_ok=True)
+            with io.BytesIO() as buffer:
+                sf.write(
+                    buffer,
+                    sample["array"],
+                    sample["sampling_rate"],
+                    format="MP3",
+                )
+                with open(audio_path, "wb") as f:
+                    f.write(buffer.getvalue())
         return batch
 
     vectorized_datasets = DatasetDict()
