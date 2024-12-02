@@ -75,8 +75,9 @@ class DataCollatorSpeechSeq2SeqWithPadding:
             labels_batch.attention_mask.ne(1), -100
         )
 
-        if (labels[:, 0] == self.decoder_start_token_id).all().cpu().item():
-            labels = labels[:, 1:]
+        # remove the start token from the labels
+        # if (labels[:, 0] == self.decoder_start_token_id).all().cpu().item():
+        #     labels = labels[:, 1:]
 
         batch["labels"] = labels
 
