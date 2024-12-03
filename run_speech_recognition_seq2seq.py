@@ -42,6 +42,7 @@ from src.dataclass_args import ModelArguments, DataTrainingArguments
 from src.custom_trainer import DebugSeq2SeqTrainer
 from src.data_collator import DataCollatorSpeechSeq2SeqWithPadding
 from src.logger_setup import setup_logger
+from src.utils import count_parameters
 import soundfile as sf
 import io
 
@@ -204,6 +205,9 @@ def main():
         raise ValueError(
             "Make sure that `config.decoder_start_token_id` is correctly defined"
         )
+
+    num_params = count_parameters(model)
+    logger.info(f"Number of trainable parameters: {num_params:,}")
 
     if model_args.freeze_feature_encoder:
         model.freeze_feature_encoder()
