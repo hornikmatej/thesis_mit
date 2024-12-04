@@ -159,7 +159,7 @@ cython_debug/
 wandb/
 
 # model directory + training checkpoints
-seq2seq_wav2vec2_bart-base/
+seq2seq_wav2vec2_bart-base*/
 
 # SCTK module
 SCTK/

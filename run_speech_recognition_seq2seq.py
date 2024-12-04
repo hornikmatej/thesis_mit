@@ -206,8 +206,10 @@ def main():
             "Make sure that `config.decoder_start_token_id` is correctly defined"
         )
 
-    num_params = count_parameters(model)
-    logger.info(f"Number of trainable parameters: {num_params:,}")
+    num_params_encoder, num_params_decoder, num_params_total = count_parameters(model)
+    logger.info(
+        f"Number of trainable parameters - Encoder: {num_params_encoder:,}, Decoder: {num_params_decoder:,}, Total: {num_params_total:,}"
+    )
 
     if model_args.freeze_feature_encoder:
         model.freeze_feature_encoder()

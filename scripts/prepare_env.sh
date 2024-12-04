@@ -10,12 +10,12 @@
 # 0. Go to the repository root
 cd /storage/brno2/home/xhorni20/dp_mit
 
-
 # 1. Open an interactive Singularity shell and execute the commands
 singularity shell --nv /cvmfs/singularity.metacentrum.cz/NGC/PyTorch:24.04-py3.SIF
 
 # Use $SCRATCHDIR for hf cache
 export HF_HOME=$SCRATCHDIR/.cache/huggingface
+export OMP_NUM_THREADS=1
 # export HF_HOME=/storage/brno2/home/xhorni20/.cache/huggingface
 
 # TODO: doesnt work all in one script

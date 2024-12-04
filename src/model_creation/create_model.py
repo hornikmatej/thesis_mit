@@ -4,7 +4,7 @@ import torch
 
 encoder_id = "facebook/wav2vec2-base"
 decoder_id = "facebook/bart-base"
-SAVE_PATH = "./seq2seq_wav2vec2_bart-base"
+SAVE_PATH = "../../seq2seq_wav2vec2_bart-base"
 
 model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
     encoder_id, decoder_id, encoder_add_adapter=True

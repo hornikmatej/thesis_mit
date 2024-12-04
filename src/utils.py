@@ -23,4 +23,15 @@ def write_wandb_pred(
 
 
 def count_parameters(model):
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+    encoder_params = (
+        sum(p.numel() for p in model.encoder.parameters() if p.requires_grad)
+        if hasattr(model, "encoder")
+        else 0
+    )
+    decoder_params = (
+        sum(p.numel() for p in model.decoder.parameters() if p.requires_grad)
+        if hasattr(model, "decoder")
+        else 0
+    )
+    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return encoder_params, decoder_params, total_params
