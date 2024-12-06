@@ -220,3 +220,7 @@ class DataTrainingArguments:
         default="/home/matej/fitvut/dp_mit/SCTK/bin/sclite",
         metadata={"help": "Path to the SCLITE executable"},
     )
+    wandb_project: str = field(
+        default="seq2seq_encoder-decoder",
+        metadata={"help": "Weights & Biases project name"},
+    )

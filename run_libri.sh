@@ -2,15 +2,15 @@
 # python -m torch.distributed.launch --nproc_per_node 8 run_speech_recognition_seq2seq.py \
 CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--dataset_name="librispeech_asr" \
-	--model_name_or_path="./seq2seq_wav2vec2_bart-base" \
+	--model_name_or_path="./seq2seq_wav2vec2_bart-base_scratch" \
 	--dataset_config_name="clean" \
 	--train_split_name="train.100" \
 	--eval_split_name="validation" \
-	--output_dir="./seq2seq_wav2vec2_bart-base/training_librespeech" \
-	--preprocessing_num_workers="16" \
+	--output_dir="./seq2seq_wav2vec2_bart-base_scratch/training_librespeech" \
+	--preprocessing_num_workers="1" \
 	--length_column_name="input_length" \
 	--overwrite_output_dir \
-	--num_train_epochs="5" \
+	--num_train_epochs="25" \
 	--per_device_train_batch_size="64" \
 	--per_device_eval_batch_size="64" \
 	--gradient_accumulation_steps="1" \
@@ -31,7 +31,8 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--do_lower_case \
     --trust_remote_code \
     --report_to="wandb" \
-	--sclite_path="/storage/brno2/home/xhorni20/dp_mit/SCTK/bin/sclite"
+	--sclite_path="/storage/brno2/home/xhorni20/dp_mit/SCTK/bin/sclite" \
+	--wandb_project="seq2seq_encoder-decoder_scratch" \
 
 ## REFERENCE:
 	# --dataset_name="librispeech_asr" \

@@ -51,7 +51,6 @@ logger = logging.getLogger(__name__)
 
 # Monitoring
 WANDB_KEY = settings.wandb_token.get_secret_value()
-WANDB_PROJECT = "seq2seq_encoder-decoder"
 
 
 def main():
@@ -63,6 +62,7 @@ def main():
 
     # add wandb run name to training_args
     training_args.run_name = f"{data_args.dataset_name}_{data_args.dataset_config_name}_wav2vec2-bart_bs{training_args.per_device_train_batch_size}_lr{training_args.learning_rate}_ep{training_args.num_train_epochs}"
+    WANDB_PROJECT = data_args.wandb_project
 
     # 2. Setup logging
     log_level = setup_logger(training_args)
@@ -148,6 +148,7 @@ def main():
             "Make sure to set `--text_column_name` to the correct text column - one of "
             f"{', '.join(next(iter(raw_datasets.values())).column_names)}."
         )
+    logger.warning(f"Loaded {data_args.dataset_name} dataset")
 
     # 5. Load pretrained model, tokenizer, and feature extractor
     #
@@ -207,7 +208,7 @@ def main():
         )
 
     num_params_encoder, num_params_decoder, num_params_total = count_parameters(model)
-    logger.info(
+    logger.warning(
         f"Number of trainable parameters - Encoder: {num_params_encoder:,}, Decoder: {num_params_decoder:,}, Total: {num_params_total:,}"
     )
 
@@ -249,6 +250,7 @@ def main():
             "Should you need `suppress_tokens`, please manually set them in the fine-tuning script."
         )
         model.generation_config.suppress_tokens = model_args.suppress_tokens
+    logger.warning(f"Loaded model {model_args.model_name_or_path}")
 
     # 6. Resample speech dataset if necessary
     dataset_sampling_rate = (
@@ -434,8 +436,10 @@ def main():
     # cached dataset
     if data_args.preprocessing_only:
         cache = {k: v.cache_files for k, v in vectorized_datasets.items()}
-        logger.info(f"Data preprocessing finished. Files cached at {cache}.")
+        logger.warning(f"Data preprocessing finished. Files cached at {cache}.")
         return
+
+    logger.warning("Data preprocessing finished.")
 
     # 8. Load Metric
     metric = evaluate.load("wer", cache_dir=model_args.cache_dir)
@@ -516,7 +520,7 @@ def main():
     # 13. Evaluation
     results = {}
     if training_args.do_eval:
-        logger.info("*** Evaluate ***")
+        logger.warning("*** Evaluate ***")
 
         metrics = trainer.evaluate(
             metric_key_prefix="eval",
