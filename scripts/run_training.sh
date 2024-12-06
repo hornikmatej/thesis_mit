@@ -15,6 +15,6 @@ export OMP_NUM_THREADS=1
 # TODO: doesnt work all in one script
 python -m pip install poetry
 python -m poetry install
-python m poetry run ./run_libri.sh
+python -m poetry run ./run_libri.sh
 
 # ./bin/sclite -r demo.ref.txt -h demo.hyp.txt -i spu_id -o sum pra stdout  
