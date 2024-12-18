@@ -61,7 +61,7 @@ def main():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # add wandb run name to training_args
-    training_args.run_name = f"{data_args.dataset_name}_{data_args.dataset_config_name}_wav2vec2-bart_bs{training_args.per_device_train_batch_size}_lr{training_args.learning_rate}_ep{training_args.num_train_epochs}"
+    training_args.run_name = f"{data_args.dataset_name}_{data_args.dataset_config_name}_split-{data_args.train_split_name}_wav2vec2-bart_bs{training_args.per_device_train_batch_size}_lr{training_args.learning_rate}_ep{training_args.num_train_epochs}"
     WANDB_PROJECT = data_args.wandb_project
 
     # 2. Setup logging
