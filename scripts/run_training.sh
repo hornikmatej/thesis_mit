@@ -10,7 +10,7 @@ cd /storage/brno2/home/xhorni20/dp_mit
 # Use $SCRATCHDIR for hf cache
 # export HF_HOME=$SCRATCHDIR/.cache/huggingface
 export HF_HOME=/storage/brno2/home/xhorni20/.cache/huggingface
-export OMP_NUM_THREADS=1
+export OMP_NUM_THREADS=2
 
 # TODO: doesnt work all in one script
 python -m pip install poetry

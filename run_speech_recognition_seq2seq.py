@@ -24,6 +24,7 @@ import datasets
 import evaluate
 import wandb
 
+import torch._dynamo
 from datasets import DatasetDict, load_dataset
 from transformers import (
     AutoConfig,
@@ -48,6 +49,7 @@ import io
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+torch._dynamo.config.suppress_errors = True
 
 # Monitoring
 WANDB_KEY = settings.wandb_token.get_secret_value()
