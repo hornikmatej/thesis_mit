@@ -37,3 +37,4 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
     --report_to="wandb" \
 	--sclite_path="/storage/brno2/home/xhorni20/dp_mit/SCTK/bin/sclite" \
 	--wandb_project="seq2seq_encoder-decoder_scratch" \
+	--cache_dir="$SCRATCHDIR/preprocessed_dataset" \
