@@ -1,5 +1,7 @@
 from typing import List
+
 import wandb
+from transformers import TrainerCallback
 
 
 def write_wandb_pred(
@@ -35,3 +37,11 @@ def count_parameters(model):
     )
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     return encoder_params, decoder_params, total_params
+
+
+class ProfCallback(TrainerCallback):
+    def __init__(self, prof):
+        self.prof = prof
+
+    def on_step_end(self, args, state, control, **kwargs):
+        self.prof.step()

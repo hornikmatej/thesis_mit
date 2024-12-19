@@ -43,7 +43,7 @@ from src.dataclass_args import ModelArguments, DataTrainingArguments
 from src.custom_trainer import DebugSeq2SeqTrainer
 from src.data_collator import DataCollatorSpeechSeq2SeqWithPadding
 from src.logger_setup import setup_logger
-from src.utils import count_parameters
+from src.utils import count_parameters, ProfCallback
 import soundfile as sf
 import io
 
@@ -525,7 +525,37 @@ def main():
             checkpoint = training_args.resume_from_checkpoint
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
-        train_result = trainer.train()
+
+        if data_args.torch_profile:
+            import glob
+
+            with torch.profiler.profile(
+                activities=[
+                    torch.profiler.ProfilerActivity.CPU,
+                    torch.profiler.ProfilerActivity.CUDA,
+                ],
+                schedule=torch.profiler.schedule(
+                    skip_first=3, wait=1, warmup=1, active=2, repeat=2
+                ),
+                on_trace_ready=torch.profiler.tensorboard_trace_handler(
+                    "wandb/latest-run/tbprofile"
+                ),
+                profile_memory=True,
+                with_stack=True,
+                record_shapes=True,
+            ) as prof:
+
+                trainer.add_callback(ProfCallback(prof=prof))
+                train_result = trainer.train()
+            # create a wandb Artifact
+            profile_art = wandb.Artifact(f"trace-{wandb.run.id}", type="profile")
+            profile_art.add_file(
+                glob.glob("wandb/latest-run/tbprofile/*.pt.trace.json")[0],
+                "trace.pt.trace.json",
+            )
+            run.log_artifact(profile_art)
+        else:
+            train_result = trainer.train()
         trainer.save_model()  # Saves the feature extractor too for easy upload
 
         metrics = train_result.metrics

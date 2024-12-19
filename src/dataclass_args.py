@@ -224,3 +224,7 @@ class DataTrainingArguments:
         default="seq2seq_encoder-decoder",
         metadata={"help": "Weights & Biases project name"},
     )
+    torch_profile: bool = field(
+        default=False,
+        metadata={"help": "Whether to profile the training using PyTorch profiler"},
+    )
