@@ -8,8 +8,9 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--eval_split_name="validation" \
 	--output_dir="./seq2seq_wav2vec2_bart-base_scratch/training_librespeech" \
 	--preprocessing_num_workers="1" \
-	--dataloader_num_workers="8" \
+	--dataloader_num_workers="32" \
 	--dataloader_persistent_workers \
+	--dataloader_prefetch_factor="64" \
 	--torch_compile \
 	--length_column_name="input_length" \
 	--overwrite_output_dir \
@@ -21,8 +22,8 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--warmup_steps="400" \
 	--eval_strategy="steps" \
 	--text_column_name="text" \
-	--save_strategy="epoch" \
-	--eval_steps="400" \
+	--save_strategy="no" \
+	--eval_steps="1000" \
 	--logging_steps="10" \
 	--save_total_limit="1" \
     --freeze_feature_encoder \
