@@ -6,30 +6,32 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--dataset_config_name="en" \
 	--train_split_name="train" \
 	--eval_split_name="validation" \
-	--output_dir="./seq2seq_wav2vec2_bart-base/training" \
-	--preprocessing_num_workers="16" \
+	--output_dir="./seq2seq_wav2vec2_bart-base/training_voxpopuli" \
+	--preprocessing_num_workers="1" \
+	--dataloader_num_workers="8" \
+	--dataloader_prefetch_factor="1" \
 	--length_column_name="input_length" \
 	--overwrite_output_dir \
 	--num_train_epochs="6" \
-	--per_device_train_batch_size="64" \
-	--per_device_eval_batch_size="64" \
-	--gradient_accumulation_steps="2" \
-	--learning_rate="3e-4" \
-	--warmup_steps="1000" \
+	--per_device_train_batch_size="96" \
+	--per_device_eval_batch_size="96" \
+	--gradient_accumulation_steps="1" \
+	--learning_rate="1e-4" \
+	--warmup_steps="100" \
 	--eval_strategy="steps" \
 	--text_column_name="normalized_text" \
-	--save_strategy="epoch" \
+	--save_strategy="no" \
 	--eval_steps="1000" \
 	--logging_steps="10" \
 	--save_total_limit="1" \
     --freeze_feature_encoder \
 	--bf16 \
     --task="transcribe" \
-	--group_by_length \
 	--predict_with_generate \
 	--do_train --do_eval \
 	--do_lower_case \
     --trust_remote_code \
     --report_to="wandb" \
 	--sclite_path="/storage/brno2/home/xhorni20/dp_mit/SCTK/bin/sclite" \
-	--wandb_project="seq2seq_encoder-decoder_scratch" \
+	--wandb_project="seq2seq_encoder-decoder" \
+	--cache_dir="$SCRATCHDIR/preprocessed_dataset_voxpopuli" \
