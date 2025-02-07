@@ -8,8 +8,8 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--eval_split_name="validation" \
 	--output_dir="./seq2seq_wav2vec2_bart-base/training_voxpopuli" \
 	--preprocessing_num_workers="1" \
-	--dataloader_num_workers="8" \
-	--dataloader_prefetch_factor="1" \
+	--dataloader_num_workers="16" \
+	--dataloader_prefetch_factor="2" \
 	--length_column_name="input_length" \
 	--overwrite_output_dir \
 	--num_train_epochs="6" \

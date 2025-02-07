@@ -298,7 +298,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
 
         # Log to WandB
         if metrics:
-            wandb.log(metrics, step=batch_idx)  # Log with batch index as step
+            wandb.log(metrics)  # Log with batch index as step
             logger_collator.info(f"Logged SCLITE metrics to WandB: {metrics}")
         else:
             logger_collator.warning(
