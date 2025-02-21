@@ -2,7 +2,7 @@
 # python -m torch.distributed.launch --nproc_per_node 8 run_speech_recognition_seq2seq.py \
 CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--dataset_name="librispeech_asr" \
-	--model_name_or_path="./seq2seq_wav2vec2_bart-base/fin_training_libri_2" \
+	--model_name_or_path="./seq2seq_wav2vec2_bart-base/" \
 	--dataset_config_name="clean" \
 	--train_split_name="train.100" \
 	--eval_split_name="validation" \
@@ -33,5 +33,6 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--do_lower_case \
     --streaming \
     --trust_remote_code \
-	--log_level="debug" \
+	--log_level="info" \
 	--sclite_path="/home/matej/fitvut/dp_mit/SCTK/bin/sclite" \
+	--wandb_project="huggingface" \

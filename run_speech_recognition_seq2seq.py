@@ -141,6 +141,21 @@ def main():
                 ),
                 streaming=data_args.streaming,
             )
+        if training_args.do_predict:
+            raw_datasets["test"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                split=data_args.test_split_name,
+                cache_dir=model_args.cache_dir,
+                token=model_args.token,
+                trust_remote_code=model_args.trust_remote_code,
+                num_proc=(
+                    data_args.preprocessing_num_workers
+                    if not data_args.streaming
+                    else None
+                ),
+                streaming=data_args.streaming,
+            )
 
         if (
             data_args.audio_column_name
@@ -243,7 +258,6 @@ def main():
             "only be set for multilingual checkpoints."
         )
 
-    # TODO (Sanchit): deprecate these arguments in v4.41
     if model_args.forced_decoder_ids is not None:
         logger.warning(
             "The use of `forced_decoder_ids` is deprecated and will be removed in v4.41."
@@ -314,6 +328,16 @@ def main():
                 raw_datasets["eval"] = raw_datasets["eval"].select(
                     range(data_args.max_eval_samples)
                 )
+        # WARNING: Not needed, since i was take the whole dataset
+        # if training_args.do_predict:
+        #     if data_args.streaming:
+        #         raw_datasets["test"] = raw_datasets["test"].take(
+        #             data_args.max_predict_samples
+        #         )
+        #     else:
+        #         raw_datasets["test"] = raw_datasets["test"].select(
+        #             range(data_args.max_predict_samples)
+        #         )
 
         def prepare_dataset(batch):
             # process audio
@@ -422,6 +446,19 @@ def main():
                         num_proc=data_args.preprocessing_num_workers,
                         desc="preprocess eval dataset",
                     )
+            if training_args.do_predict:
+                if data_args.streaming:
+                    vectorized_datasets["test"] = raw_datasets["test"].map(
+                        prepare_dataset,
+                        remove_columns=raw_datasets["test"].column_names,
+                    )
+                else:
+                    vectorized_datasets["test"] = raw_datasets["test"].map(
+                        prepare_dataset,
+                        remove_columns=raw_datasets["test"].column_names,
+                        num_proc=data_args.preprocessing_num_workers,
+                        desc="preprocess test dataset",
+                    )
 
         # filter data that is shorter than min_input_length or longer than
         # max_input_length
@@ -437,6 +474,10 @@ def main():
                 vectorized_datasets["eval"] = vectorized_datasets["eval"].filter(
                     is_audio_in_length_range, input_columns=["input_length"]
                 )
+            if training_args.do_predict:
+                vectorized_datasets["test"] = vectorized_datasets["test"].filter(
+                    is_audio_in_length_range, input_columns=["input_length"]
+                )
         else:
             vectorized_datasets = vectorized_datasets.filter(
                 is_audio_in_length_range,
@@ -450,6 +491,7 @@ def main():
     # In a second step `args.preprocessing_only` can then be set to `False` to load the
     # cached dataset
     if data_args.preprocessing_only:
+        # WARNING: Change in order not to rewrite the cache
         output_dataset_dir = os.path.join(
             "/storage/brno2/home/xhorni20/dp_mit", "preprocessed_dataset"
         )
@@ -574,10 +616,10 @@ def main():
     # 13. Evaluation
     results = {}
     if training_args.do_eval:
-        logger.warning("*** Evaluate ***")
+        logger.warning("*** Evaluate on validation ***")
 
         metrics = trainer.evaluate(
-            metric_key_prefix="eval",
+            metric_key_prefix="eval_dev",
             max_length=training_args.generation_max_length,
             num_beams=training_args.generation_num_beams,
         )
@@ -593,8 +635,24 @@ def main():
                 max_eval_samples, len(vectorized_datasets["eval"])
             )
 
-        trainer.log_metrics("eval", metrics)
-        trainer.save_metrics("eval", metrics)
+        trainer.log_metrics("eval_dev", metrics)
+        trainer.save_metrics("eval_dev", metrics)
+    if training_args.do_predict:
+        logger.warning("*** Evaluate on test ***")
+
+        metrics = trainer.evaluate(
+            eval_dataset=vectorized_datasets["test"],
+            metric_key_prefix="eval_test",
+            max_length=training_args.generation_max_length,
+            num_beams=training_args.generation_num_beams,
+        )
+
+        # Log metrics as usual
+        if not data_args.streaming:
+            metrics["eval_samples"] = len(vectorized_datasets["test"])
+
+        trainer.log_metrics("eval_test", metrics)
+        trainer.save_metrics("eval_test", metrics)
 
     # 14. Write Training Stats
     kwargs = {

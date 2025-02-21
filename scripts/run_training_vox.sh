@@ -18,7 +18,7 @@ export OMP_NUM_THREADS=2
 
 # TODO: doesnt work all in one script
 python -m pip install poetry
-python -m poetry run pip install --no-build-isolation flash-attn
+# python -m poetry run pip install --no-build-isolation flash-attn
 python -m poetry install
 python -m poetry run ./run_voxpopuli.sh
 

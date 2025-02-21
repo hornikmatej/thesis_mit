@@ -6,6 +6,7 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--dataset_config_name="en" \
 	--train_split_name="train" \
 	--eval_split_name="validation" \
+	--test_split_name="test" \
 	--output_dir="./seq2seq_wav2vec2_bart-base/training_voxpopuli" \
 	--preprocessing_num_workers="1" \
 	--dataloader_num_workers="16" \
@@ -28,7 +29,7 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--bf16 \
     --task="transcribe" \
 	--predict_with_generate \
-	--do_train --do_eval \
+	--do_train --do_eval --do_predict \
 	--do_lower_case \
     --trust_remote_code \
     --report_to="wandb" \
