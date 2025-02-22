@@ -179,6 +179,15 @@ class DataTrainingArguments:
             )
         },
     )
+    preprocessed_data_dir: str = field(
+        default="./",
+        metadata={
+            "help": (
+                "Where to store the preprocessed data. If not set, the preprocessed data will be stored in the same"
+                " directory as the original data."
+            )
+        },
+    )
     train_split_name: str = field(
         default="train",
         metadata={

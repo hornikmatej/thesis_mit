@@ -39,6 +39,21 @@ def count_parameters(model):
     return encoder_params, decoder_params, total_params
 
 
+def count_all_parameters(model):
+    """
+    Count the number of trainable and total parameters in the model.
+
+    Args:
+        model: PyTorch model.
+
+    Returns:
+        tuple: (trainable_params, total_params)
+    """
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    return trainable_params, total_params
+
+
 class ProfCallback(TrainerCallback):
     def __init__(self, prof):
         self.prof = prof

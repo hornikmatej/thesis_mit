@@ -5,7 +5,7 @@ cd /storage/brno2/home/xhorni20/dp_mit
 # singularity shell --nv /cvmfs/singularity.metacentrum.cz/NGC/PyTorch:24.10-py3.SIF
 
 # Copy dataset to the scratch ssd
-SOURCE_DIR="/storage/brno2/home/xhorni20/dp_mit/preprocessed_dataset"
+SOURCE_DIR="/storage/brno2/home/xhorni20/dp_mit/preprocessed_dataset_libri"
 DESTINATION_DIR="$SCRATCHDIR"
 mkdir -p "$DESTINATION_DIR"
 rsync -ahW --inplace --info=progress2 "$SOURCE_DIR" "$DESTINATION_DIR"

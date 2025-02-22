@@ -166,3 +166,7 @@ SCTK/
 
 # for evals and shit
 tmp/
+
+scripts/sync_to_remote2.sh
+run_libri_azure.sh
+run_voxpopuli_azure.sh

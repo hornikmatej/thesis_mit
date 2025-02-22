@@ -19,13 +19,20 @@ Fine-tuning the library models for sequence to sequence speech recognition.
 
 import logging
 import os
+import io
+import aiohttp
 
 import datasets
 import evaluate
 import wandb
-
+import torch
 import torch._dynamo
-from datasets import Dataset, DatasetDict, load_dataset
+
+
+from tqdm import tqdm
+from datasets import DatasetDict, load_dataset, DownloadConfig
+
+
 from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
@@ -43,13 +50,18 @@ from src.dataclass_args import ModelArguments, DataTrainingArguments
 from src.custom_trainer import DebugSeq2SeqTrainer
 from src.data_collator import DataCollatorSpeechSeq2SeqWithPadding
 from src.logger_setup import setup_logger
-from src.utils import count_parameters, ProfCallback
+from src.utils import count_parameters, count_all_parameters, ProfCallback
 import soundfile as sf
-import io
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 torch._dynamo.config.suppress_errors = True
+
+download_config = DownloadConfig(
+    resume_download=True,
+    max_retries=3,  # Optionally increase the number of retries
+    storage_options={"client_kwargs": {"timeout": aiohttp.ClientTimeout(total=3600)}},
+)
 
 # Monitoring
 WANDB_KEY = settings.wandb_token.get_secret_value()
@@ -124,6 +136,7 @@ def main():
                     else None
                 ),
                 streaming=data_args.streaming,
+                download_config=download_config,
             )
 
         if training_args.do_eval:
@@ -140,6 +153,7 @@ def main():
                     else None
                 ),
                 streaming=data_args.streaming,
+                download_config=download_config,
             )
         if training_args.do_predict:
             raw_datasets["test"] = load_dataset(
@@ -155,6 +169,7 @@ def main():
                     else None
                 ),
                 streaming=data_args.streaming,
+                download_config=download_config,
             )
 
         if (
@@ -493,7 +508,7 @@ def main():
     if data_args.preprocessing_only:
         # WARNING: Change in order not to rewrite the cache
         output_dataset_dir = os.path.join(
-            "/storage/brno2/home/xhorni20/dp_mit", "preprocessed_dataset"
+            data_args.preprocessed_data_dir, "preprocessed_dataset"
         )
         vectorized_datasets.save_to_disk(
             output_dataset_dir,
@@ -654,7 +669,89 @@ def main():
         trainer.log_metrics("eval_test", metrics)
         trainer.save_metrics("eval_test", metrics)
 
-    # 14. Write Training Stats
+    # 14 Run timing on one sample
+
+    if training_args.do_train:
+        logger.warning(
+            "Measuring training step speed on a 10-second sample from the test dataset."
+        )
+
+        # Select a sample from the test dataset with length ~10 seconds
+        test_dataset = vectorized_datasets["test"]
+        sampling_rate = feature_extractor.sampling_rate
+        target_length = 10 * sampling_rate  # 10 seconds in samples
+        input_lengths = test_dataset["input_length"]
+        differences = [abs(length - target_length) for length in input_lengths]
+        min_diff_idx = differences.index(min(differences))
+        selected_sample = test_dataset[min_diff_idx]
+
+        # Prepare the batch using the data collator
+        batch = [selected_sample]
+        batch = data_collator(batch)
+        batch = {k: v.to(trainer.args.device) for k, v in batch.items()}
+
+        # Set model to training mode
+        model.train()
+
+        # Warm-up iterations (5 iterations)
+        num_warmup = 5
+        for _ in range(num_warmup):
+            outputs = model(**batch)
+            loss = outputs.loss
+            loss.backward()
+            model.zero_grad()
+
+        # Measurement iterations (500 iterations)
+        num_iterations = 500
+        total_time = 0.0
+
+        for _ in tqdm(
+            range(num_iterations), desc="Training steps for one sample", leave=False
+        ):
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+            start_event.record()
+
+            outputs = model(**batch)
+            loss = outputs.loss
+            loss.backward()
+
+            end_event.record()
+            torch.cuda.synchronize()
+            time_taken = (
+                start_event.elapsed_time(end_event) / 1000
+            )  # Convert to seconds
+            total_time += time_taken
+
+            model.zero_grad()  # Reset gradients for the next iteration
+
+        # Compute average time per step
+        avg_time_per_step = total_time / num_iterations
+        logger.warning(
+            f"Average time per training step: {avg_time_per_step:.6f} seconds"
+        )
+
+        # Count parameters
+        trainable_params, total_params = count_all_parameters(model)
+        logger.warning(f"Trainable parameters: {trainable_params:,}")
+        logger.warning(f"Total parameters: {total_params:,}")
+
+        # Log metrics to wandb
+        if "wandb" in training_args.report_to:
+            wandb.define_metric("avg_time_per_step")
+            # Link your two y-axis metrics to the custom x-axis
+            wandb.define_metric("trainable_params", step_metric="avg_time_per_step")
+            wandb.define_metric("total_params", step_metric="avg_time_per_step")
+            wandb.log(
+                {
+                    "avg_time_per_step": avg_time_per_step,
+                    "trainable_params": trainable_params,
+                    "total_params": total_params,
+                    "test_sample_index": min_diff_idx,
+                }
+            )
+
+    # 15. Write Training Stats
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "automatic-speech-recognition",
