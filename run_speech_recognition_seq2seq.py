@@ -242,6 +242,7 @@ def main():
         attn_implementation="sdpa",
     )
 
+    tokenizer.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
     if model.config.decoder_start_token_id is None:
         raise ValueError(
             "Make sure that `config.decoder_start_token_id` is correctly defined"
