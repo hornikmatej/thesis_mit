@@ -15,7 +15,7 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--overwrite_output_dir \
 	--num_train_epochs="5" \
 	--per_device_train_batch_size="64" \
-	--per_device_eval_batch_size="64" \
+	--per_device_eval_batch_size="96" \
 	--gradient_accumulation_steps="1" \
 	--learning_rate="3e-4" \
 	--warmup_steps="400" \

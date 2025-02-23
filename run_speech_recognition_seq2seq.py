@@ -739,18 +739,17 @@ def main():
 
         # Log metrics to wandb
         if "wandb" in training_args.report_to:
-            wandb.define_metric("avg_time_per_step")
-            # Link your two y-axis metrics to the custom x-axis
-            wandb.define_metric("trainable_params", step_metric="avg_time_per_step")
-            wandb.define_metric("total_params", step_metric="avg_time_per_step")
-            wandb.log(
-                {
-                    "avg_time_per_step": avg_time_per_step,
-                    "trainable_params": trainable_params,
-                    "total_params": total_params,
-                    "test_sample_index": min_diff_idx,
-                }
-            )
+            data_total = [[avg_time_per_step, trainable_params]]
+            data_trainable = [[avg_time_per_step, total_params]]
+            wandb.log({
+                "model_speed2size1": wandb.plot.scatter(wandb.Table(data=data_total, columns=["Time per step", "Trainable parameters"]), "Time per step", "Trainable parameters"),
+            })
+            wandb.log({
+                "model_speed2size2": wandb.plot.scatter(wandb.Table(data=data_trainable, columns=["Time per step", "Total parameters"]), "Time per step", "Total parameters"),
+            })
+            wandb.log({
+                "test_sample_index": min_diff_idx,
+            })
 
     # 15. Write Training Stats
     kwargs = {
