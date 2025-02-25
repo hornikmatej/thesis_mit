@@ -27,7 +27,7 @@ import evaluate
 import wandb
 import torch
 import torch._dynamo
-
+import numpy as np
 
 from tqdm import tqdm
 from datasets import DatasetDict, load_dataset, DownloadConfig
@@ -704,7 +704,7 @@ def main():
 
         # Measurement iterations (500 iterations)
         num_iterations = 500
-        total_time = 0.0
+        total_time = []
 
         for _ in tqdm(
             range(num_iterations), desc="Training steps for one sample", leave=False
@@ -722,15 +722,17 @@ def main():
             time_taken = (
                 start_event.elapsed_time(end_event) / 1000
             )  # Convert to seconds
-            total_time += time_taken
+            total_time.append(time_taken)
 
             model.zero_grad()  # Reset gradients for the next iteration
 
         # Compute average time per step
-        avg_time_per_step = total_time / num_iterations
+        avg_time_per_step = sum(total_time) / num_iterations
+        std_dev = np.std(total_time)
         logger.warning(
             f"Average time per training step: {avg_time_per_step:.6f} seconds"
         )
+        logger.warning(f"Standard deviation of training steps: {std_dev:.6f} seconds")
 
         # Count parameters
         trainable_params, total_params = count_all_parameters(model)

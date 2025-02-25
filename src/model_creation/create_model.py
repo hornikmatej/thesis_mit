@@ -19,8 +19,9 @@ model.config.encoder.layerdrop = 0.0
 model.config.use_cache = False
 model.config.processor_class = "Wav2Vec2Processor"
 
-# check if generation works
-_ = model.generate(torch.ones((1, 2000)))
+# check if forward pass works
+dummy_input = torch.ones((1, 2000))
+outputs = model.forward(dummy_input)
 
 model.save_pretrained(SAVE_PATH)
 

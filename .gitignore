@@ -172,3 +172,5 @@ scripts/sync_to_remote2.sh
 
 # preprocessed datasets
 preprocessed_dataset*
+
+.vscode/

@@ -2,12 +2,12 @@
 # python -m torch.distributed.launch --nproc_per_node 8 run_speech_recognition_seq2seq.py \
 CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--dataset_name="facebook/voxpopuli" \
-	--model_name_or_path="./seq2seq_wav2vec2_bart-base" \
+	--model_name_or_path="./seq2seq_wav2vec2_bart-base_a64x" \
 	--dataset_config_name="en" \
 	--train_split_name="train" \
 	--eval_split_name="validation" \
 	--test_split_name="test" \
-	--output_dir="./seq2seq_wav2vec2_bart-base/training_voxpopuli" \
+	--output_dir="./seq2seq_wav2vec2_bart-base_a64x/training_voxpopuli" \
 	--preprocessing_num_workers="1" \
 	--dataloader_num_workers="16" \
 	--dataloader_prefetch_factor="2" \
