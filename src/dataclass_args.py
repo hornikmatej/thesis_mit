@@ -97,6 +97,12 @@ class ModelArguments:
             "help": "Whether to apply *SpecAugment* data augmentation to the input features. This is currently only relevant for Wav2Vec2, HuBERT, WavLM and Whisper models."
         },
     )
+    use_lora_adapter: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to use LoRA adapters for training."
+        },
+    )
 
 
 @dataclass

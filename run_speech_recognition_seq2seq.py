@@ -525,7 +525,6 @@ def main():
 
     # 8. Load Metric
     metric = evaluate.load("wer")
-
     def compute_metrics(pred):
         pred_ids = pred.predictions
 
@@ -550,6 +549,39 @@ def main():
             config.save_pretrained(training_args.output_dir)
 
     processor = AutoProcessor.from_pretrained(training_args.output_dir)
+
+    # 9.5 LoRA adapters
+    if model_args.use_lora_adapter:
+        from peft import LoraConfig, get_peft_model
+
+        target_modules = [
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "out_proj",
+            "intermediate_dense",
+            "output_dense",
+            "fc1",
+            "fc2",
+        ]
+        config = LoraConfig(
+            r=128,
+            lora_alpha=512,
+            target_modules=target_modules,
+            lora_dropout=0.05,
+            bias="none",
+            # use_rslora=True,
+            # init_lora_weights="pissa_niter_128",
+            # use_dora=True,
+
+
+        )
+
+        model = get_peft_model(model, config)
+        for name, param in model.named_parameters():
+            if "adapter.layers" in name or "embed_tokens" in name or "lm_head" in name:
+                param.requires_grad = True
+        logger.warning(model.print_trainable_parameters())
 
     # 10. Define data collator
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(

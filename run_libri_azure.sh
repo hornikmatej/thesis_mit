@@ -15,20 +15,21 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--overwrite_output_dir \
 	--num_train_epochs="5" \
 	--per_device_train_batch_size="64" \
-	--per_device_eval_batch_size="64" \
+	--per_device_eval_batch_size="96" \
 	--gradient_accumulation_steps="1" \
 	--learning_rate="3e-4" \
 	--warmup_steps="400" \
 	--eval_strategy="steps" \
 	--text_column_name="text" \
 	--save_strategy="no" \
-	--eval_steps="400" \
+	--eval_steps="1400" \
 	--logging_steps="10" \
 	--save_total_limit="1" \
     --freeze_feature_encoder \
 	--bf16 \
     --task="transcribe" \
 	--predict_with_generate \
+	--use_lora_adapter \
 	--do_train --do_eval --do_predict \
 	--do_lower_case \
     --trust_remote_code \
