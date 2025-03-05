@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional,Literal
 
 
 @dataclass
@@ -103,7 +103,30 @@ class ModelArguments:
             "help": "Whether to use LoRA adapters for training."
         },
     )
-
+    lora_r: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "LoRA rank."
+        },
+    )
+    lora_alpha: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "LoRA alpha."
+        },
+    )
+    lora_dropout: Optional[float] = field(
+        default=0.05,
+        metadata={
+            "help": "LoRA dropout."
+        },
+    )
+    lora_init: Optional[str] = field(
+        default="True",
+        metadata={
+            "help": "LoRA initialization method."
+        },
+    )
 
 @dataclass
 class DataTrainingArguments:

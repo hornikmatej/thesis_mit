@@ -22,14 +22,18 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
 	--eval_strategy="steps" \
 	--text_column_name="text" \
 	--save_strategy="no" \
-	--eval_steps="1400" \
+	--eval_steps="2369" \
 	--logging_steps="10" \
 	--save_total_limit="1" \
     --freeze_feature_encoder \
 	--bf16 \
     --task="transcribe" \
-	--predict_with_generate \
 	--use_lora_adapter \
+	--lora_r="16" \
+	--lora_alpha="512" \
+	--lora_dropout="0.05" \
+	--lora_init="True" \
+	--predict_with_generate \
 	--do_train --do_eval --do_predict \
 	--do_lower_case \
     --trust_remote_code \

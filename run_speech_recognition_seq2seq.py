@@ -550,38 +550,6 @@ def main():
 
     processor = AutoProcessor.from_pretrained(training_args.output_dir)
 
-    # 9.5 LoRA adapters
-    if model_args.use_lora_adapter:
-        from peft import LoraConfig, get_peft_model
-
-        target_modules = [
-            "q_proj",
-            "k_proj",
-            "v_proj",
-            "out_proj",
-            "intermediate_dense",
-            "output_dense",
-            "fc1",
-            "fc2",
-        ]
-        config = LoraConfig(
-            r=128,
-            lora_alpha=512,
-            target_modules=target_modules,
-            lora_dropout=0.05,
-            bias="none",
-            # use_rslora=True,
-            # init_lora_weights="pissa_niter_128",
-            # use_dora=True,
-
-
-        )
-
-        model = get_peft_model(model, config)
-        for name, param in model.named_parameters():
-            if "adapter.layers" in name or "embed_tokens" in name or "lm_head" in name:
-                param.requires_grad = True
-        logger.warning(model.print_trainable_parameters())
 
     # 10. Define data collator
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(
@@ -593,9 +561,27 @@ def main():
         sclite_path=data_args.sclite_path,
     )
 
+    # 10.5 LoRA adapters
+    if model_args.use_lora_adapter:
+        from peft import LoraConfig, get_peft_model
+        config = LoraConfig(
+            r=model_args.lora_r,
+            lora_alpha=model_args.lora_alpha,
+            target_modules=["q_proj", "k_proj", "v_proj", "out_proj", "intermediate_dense", "output_dense", "fc1", "fc2"],
+            lora_dropout=model_args.lora_dropout,
+            init_lora_weights=True if model_args.lora_init == "True" else model_args.lora_init,
+            # use_dora=True,
+        )
+        model = get_peft_model(model, config)
+        for name, param in model.named_parameters():
+            if "adapter.layers" in name or "embed_tokens" in name or "lm_head" in name:
+                param.requires_grad = True
+        logger.warning(model.print_trainable_parameters())
+
     # 11. Initialize Trainer
     trainer = DebugSeq2SeqTrainer(
         model=model,
+        actual_tokenizer=tokenizer,
         args=training_args,
         train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
@@ -605,7 +591,6 @@ def main():
             compute_metrics if training_args.predict_with_generate else None
         ),
         debug_dir=os.path.join(training_args.output_dir, "debug"),
-        actual_tokenizer=tokenizer,
     )
 
     # 12. Training
