@@ -711,8 +711,8 @@ def main():
         # Set model to training mode
         model.train()
 
-        # Warm-up iterations (5 iterations)
-        num_warmup = 5
+        # Warm-up iterations (15 iterations)
+        num_warmup = 15
         for _ in range(num_warmup):
             outputs = model(**batch)
             loss = outputs.loss
@@ -750,6 +750,7 @@ def main():
             f"Average time per training step: {avg_time_per_step:.6f} seconds"
         )
         logger.warning(f"Standard deviation of training steps: {std_dev:.6f} seconds")
+        logger.warning(f"Whole array of time: {total_time}")
 
         # Count parameters
         trainable_params, total_params = count_all_parameters(model)
