@@ -159,10 +159,9 @@ def create_vocabulary_from_data(
     )
 
     # take union of all unique characters in each dataset
-    vocab_set = functools.reduce(
-        lambda vocab_1, vocab_2: set(vocab_1["vocab"][0]) | set(vocab_2["vocab"][0]),
-        vocabs.values(),
-    )
+    print(vocabs.values())
+    vocab_list = [dataset["vocab"][0] for dataset in vocabs.values()]
+    vocab_set = functools.reduce(lambda a, b: set(a) | set(b), vocab_list)
 
     vocab_dict = {v: k for k, v in enumerate(sorted(vocab_set))}
 
@@ -322,8 +321,8 @@ def main():
                 data_args.dataset_config_name,
                 split=data_args.test_split_name,
                 # cache_dir=model_args.cache_dir,
-                token=model_args.token,
-                trust_remote_code=model_args.trust_remote_code,
+                token=data_args.token,
+                trust_remote_code=data_args.trust_remote_code,
                 num_proc=data_args.preprocessing_num_workers,
                 download_config=download_config,
             )
