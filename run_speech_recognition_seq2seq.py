@@ -75,7 +75,13 @@ def main():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # add wandb run name to training_args
-    training_args.run_name = f"{data_args.dataset_name}_{data_args.dataset_config_name}_split-{data_args.train_split_name}_wav2vec2-bart_bs{training_args.per_device_train_batch_size}_lr{training_args.learning_rate}_ep{training_args.num_train_epochs}"
+    training_args.run_name = (
+        f"{data_args.dataset_name}_{data_args.dataset_config_name}_"
+        f"split-{data_args.train_split_name}_wav2vec2-bart_"
+        f"bs{training_args.per_device_train_batch_size}_"
+        f"lr{training_args.learning_rate}_"
+        f"ep{training_args.num_train_epochs}"
+    )
     WANDB_PROJECT = data_args.wandb_project
 
     # 2. Setup logging
@@ -525,6 +531,7 @@ def main():
 
     # 8. Load Metric
     metric = evaluate.load("wer")
+
     def compute_metrics(pred):
         pred_ids = pred.predictions
 
@@ -550,7 +557,6 @@ def main():
 
     processor = AutoProcessor.from_pretrained(training_args.output_dir)
 
-
     # 10. Define data collator
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(
         processor=processor,
@@ -564,12 +570,24 @@ def main():
     # 10.5 LoRA adapters
     if model_args.use_lora_adapter:
         from peft import LoraConfig, get_peft_model
+
         config = LoraConfig(
             r=model_args.lora_r,
             lora_alpha=model_args.lora_alpha,
-            target_modules=["q_proj", "k_proj", "v_proj", "out_proj", "intermediate_dense", "output_dense", "fc1", "fc2"],
+            target_modules=[
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "out_proj",
+                "intermediate_dense",
+                "output_dense",
+                "fc1",
+                "fc2",
+            ],
             lora_dropout=model_args.lora_dropout,
-            init_lora_weights=True if model_args.lora_init == "True" else model_args.lora_init,
+            init_lora_weights=(
+                True if model_args.lora_init == "True" else model_args.lora_init
+            ),
             # use_dora=True,
         )
         model = get_peft_model(model, config)
@@ -761,15 +779,35 @@ def main():
         if "wandb" in training_args.report_to:
             data_total = [[avg_time_per_step, trainable_params]]
             data_trainable = [[avg_time_per_step, total_params]]
-            wandb.log({
-                "model_speed2size1": wandb.plot.scatter(wandb.Table(data=data_total, columns=["Time per step", "Trainable parameters"]), "Time per step", "Trainable parameters"),
-            })
-            wandb.log({
-                "model_speed2size2": wandb.plot.scatter(wandb.Table(data=data_trainable, columns=["Time per step", "Total parameters"]), "Time per step", "Total parameters"),
-            })
-            wandb.log({
-                "test_sample_index": min_diff_idx,
-            })
+            wandb.log(
+                {
+                    "model_speed2size1": wandb.plot.scatter(
+                        wandb.Table(
+                            data=data_total,
+                            columns=["Time per step", "Trainable parameters"],
+                        ),
+                        "Time per step",
+                        "Trainable parameters",
+                    ),
+                }
+            )
+            wandb.log(
+                {
+                    "model_speed2size2": wandb.plot.scatter(
+                        wandb.Table(
+                            data=data_trainable,
+                            columns=["Time per step", "Total parameters"],
+                        ),
+                        "Time per step",
+                        "Total parameters",
+                    ),
+                }
+            )
+            wandb.log(
+                {
+                    "test_sample_index": min_diff_idx,
+                }
+            )
 
     # 15. Write Training Stats
     kwargs = {
