@@ -24,13 +24,16 @@ import re
 import sys
 import warnings
 import wandb
+import aiohttp
+import numpy as np
+from tqdm import tqdm
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 import datasets
 import evaluate
 import torch
-from datasets import DatasetDict, load_dataset
+from datasets import DatasetDict, load_dataset, DownloadConfig
 
 import transformers
 from transformers import (
@@ -52,9 +55,14 @@ from config import get_settings
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+download_config = DownloadConfig(
+    resume_download=True,
+    max_retries=3,  # Optionally increase the number of retries
+    storage_options={"client_kwargs": {"timeout": aiohttp.ClientTimeout(total=3600)}},
+)
+
 # Monitoring
 WANDB_KEY = settings.wandb_token.get_secret_value()
-WANDB_PROJECT = "ctc"
 
 
 @dataclass
@@ -173,6 +181,21 @@ def create_vocabulary_from_data(
     return vocab_dict
 
 
+def count_all_parameters(model):
+    """
+    Count the number of trainable and total parameters in the model.
+
+    Args:
+        model: PyTorch model.
+
+    Returns:
+        tuple: (trainable_params, total_params)
+    """
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    return trainable_params, total_params
+
+
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -183,7 +206,14 @@ def main():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # add wandb run name to training_args
-    training_args.run_name = f"{data_args.dataset_name}_{data_args.dataset_config_name}_wav2vec2-base_bs{training_args.per_device_train_batch_size}_lr{training_args.learning_rate}_ep{training_args.num_train_epochs}"
+    training_args.run_name = (
+        f"{data_args.dataset_name}_{data_args.dataset_config_name}_"
+        f"split-{data_args.train_split_name}_wav2vec2-bart_"
+        f"bs{training_args.per_device_train_batch_size}_"
+        f"lr{training_args.learning_rate}_"
+        f"ep{training_args.num_train_epochs}"
+    )
+    WANDB_PROJECT = data_args.wandb_project
 
     run: wandb.Run = None
     if "wandb" in training_args.report_to:
@@ -239,46 +269,63 @@ def main():
     # 1. First, let's load the dataset
     raw_datasets = DatasetDict()
 
-    if training_args.do_train:
-        raw_datasets["train"] = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
-            split=data_args.train_split_name,
-            token=data_args.token,
-            trust_remote_code=data_args.trust_remote_code,
-        )
-
-        if data_args.audio_column_name not in raw_datasets["train"].column_names:
-            raise ValueError(
-                f"--audio_column_name '{data_args.audio_column_name}' not found in dataset '{data_args.dataset_name}'."
-                " Make sure to set `--audio_column_name` to the correct audio column - one of"
-                f" {', '.join(raw_datasets['train'].column_names)}."
+    if model_args.cache_dir is not None:
+        logger.warning(f"Using cache dir {model_args.cache_dir} for the datasets.")
+        vectorized_datasets = datasets.load_from_disk(model_args.cache_dir)
+    else:
+        if training_args.do_train:
+            raw_datasets["train"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                # cache_dir=model_args.cache_dir,
+                split=data_args.train_split_name,
+                token=data_args.token,
+                trust_remote_code=data_args.trust_remote_code,
+                num_proc=data_args.preprocessing_num_workers,
+                download_config=download_config,
+            )
+            if data_args.audio_column_name not in raw_datasets["train"].column_names:
+                raise ValueError(
+                    f"--audio_column_name '{data_args.audio_column_name}' not found in dataset '{data_args.dataset_name}'."
+                    " Make sure to set `--audio_column_name` to the correct audio column - one of"
+                    f" {', '.join(raw_datasets['train'].column_names)}."
+                )
+            if data_args.text_column_name not in raw_datasets["train"].column_names:
+                raise ValueError(
+                    f"--text_column_name {data_args.text_column_name} not found in dataset '{data_args.dataset_name}'. "
+                    "Make sure to set `--text_column_name` to the correct text column - one of "
+                    f"{', '.join(raw_datasets['train'].column_names)}."
+                )
+            if data_args.max_train_samples is not None:
+                raw_datasets["train"] = raw_datasets["train"].select(
+                    range(data_args.max_train_samples)
+                )
+        if training_args.do_eval:
+            raw_datasets["eval"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                # cache_dir=model_args.cache_dir,
+                split=data_args.eval_split_name,
+                token=data_args.token,
+                trust_remote_code=data_args.trust_remote_code,
+                num_proc=data_args.preprocessing_num_workers,
+                download_config=download_config,
             )
 
-        if data_args.text_column_name not in raw_datasets["train"].column_names:
-            raise ValueError(
-                f"--text_column_name {data_args.text_column_name} not found in dataset '{data_args.dataset_name}'. "
-                "Make sure to set `--text_column_name` to the correct text column - one of "
-                f"{', '.join(raw_datasets['train'].column_names)}."
-            )
-
-        if data_args.max_train_samples is not None:
-            raw_datasets["train"] = raw_datasets["train"].select(
-                range(data_args.max_train_samples)
-            )
-
-    if training_args.do_eval:
-        raw_datasets["eval"] = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
-            split=data_args.eval_split_name,
-            token=data_args.token,
-            trust_remote_code=data_args.trust_remote_code,
-        )
-
-        if data_args.max_eval_samples is not None:
-            raw_datasets["eval"] = raw_datasets["eval"].select(
-                range(data_args.max_eval_samples)
+            if data_args.max_eval_samples is not None:
+                raw_datasets["eval"] = raw_datasets["eval"].select(
+                    range(data_args.max_eval_samples)
+                )
+        if training_args.do_predict:
+            raw_datasets["test"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                split=data_args.test_split_name,
+                # cache_dir=model_args.cache_dir,
+                token=model_args.token,
+                trust_remote_code=model_args.trust_remote_code,
+                num_proc=data_args.preprocessing_num_workers,
+                download_config=download_config,
             )
 
     # 2. We remove some special characters from the datasets such as `,` and `.`
@@ -577,8 +624,8 @@ def main():
         # use last checkpoint if exist
         if last_checkpoint is not None:
             checkpoint = last_checkpoint
-        elif os.path.isdir(model_args.model_name_or_path):
-            checkpoint = model_args.model_name_or_path
+        # elif os.path.isdir(model_args.model_name_or_path):
+        #     checkpoint = model_args.model_name_or_path
         else:
             checkpoint = None
 
@@ -602,8 +649,12 @@ def main():
     # Evaluation
     results = {}
     if training_args.do_eval:
-        logger.info("*** Evaluate ***")
-        metrics = trainer.evaluate()
+        logger.info("*** Evaluate  on validation ***")
+        metrics = trainer.evaluate(
+            metric_key_prefix="eval_dev",
+            max_length=training_args.generation_max_length,
+            num_beams=training_args.generation_num_beams,
+        )
         max_eval_samples = (
             data_args.max_eval_samples
             if data_args.max_eval_samples is not None
@@ -613,8 +664,124 @@ def main():
             max_eval_samples, len(vectorized_datasets["eval"])
         )
 
-        trainer.log_metrics("eval", metrics)
-        trainer.save_metrics("eval", metrics)
+        trainer.log_metrics("eval_dev", metrics)
+        trainer.save_metrics("eval_dev", metrics)
+    if training_args.do_predict:
+        logger.warning("*** Evaluate on test ***")
+
+        metrics = trainer.evaluate(
+            eval_dataset=vectorized_datasets["test"],
+            metric_key_prefix="eval_test",
+            max_length=training_args.generation_max_length,
+            num_beams=training_args.generation_num_beams,
+        )
+
+        metrics["eval_samples"] = len(vectorized_datasets["test"])
+
+        trainer.log_metrics("eval_test", metrics)
+        trainer.save_metrics("eval_test", metrics)
+
+    if training_args.do_train:
+        logger.warning(
+            "Measuring training step speed on a 10-second sample from the test dataset."
+        )
+
+        # Select a sample from the test dataset with length ~10 seconds
+        test_dataset = vectorized_datasets["test"]
+        sampling_rate = feature_extractor.sampling_rate
+        target_length = 10 * sampling_rate  # 10 seconds in samples
+        input_lengths = test_dataset["input_length"]
+        differences = [abs(length - target_length) for length in input_lengths]
+        min_diff_idx = differences.index(min(differences))
+        selected_sample = test_dataset[min_diff_idx]
+
+        # Prepare the batch using the data collator
+        batch = [selected_sample]
+        batch = data_collator(batch)
+        batch = {k: v.to(trainer.args.device) for k, v in batch.items()}
+
+        # Set model to training mode
+        model.train()
+
+        # Warm-up iterations (15 iterations)
+        num_warmup = 15
+        for _ in range(num_warmup):
+            outputs = model(**batch)
+            loss = outputs.loss
+            loss.backward()
+            model.zero_grad()
+
+        # Measurement iterations (500 iterations)
+        num_iterations = 500
+        total_time = []
+
+        for _ in tqdm(
+            range(num_iterations), desc="Training steps for one sample", leave=False
+        ):
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+            start_event.record()
+
+            outputs = model(**batch)
+            loss = outputs.loss
+            loss.backward()
+
+            end_event.record()
+            torch.cuda.synchronize()
+            time_taken = (
+                start_event.elapsed_time(end_event) / 1000
+            )  # Convert to seconds
+            total_time.append(time_taken)
+
+            model.zero_grad()  # Reset gradients for the next iteration
+
+        # Compute average time per step
+        avg_time_per_step = sum(total_time) / num_iterations
+        std_dev = np.std(total_time)
+        logger.warning(
+            f"Average time per training step: {avg_time_per_step:.6f} seconds"
+        )
+        logger.warning(f"Standard deviation of training steps: {std_dev:.6f} seconds")
+        logger.warning(f"Whole array of time: {total_time}")
+
+        # Count parameters
+        trainable_params, total_params = count_all_parameters(model)
+        logger.warning(f"Trainable parameters: {trainable_params:,}")
+        logger.warning(f"Total parameters: {total_params:,}")
+
+        # Log metrics to wandb
+        if "wandb" in training_args.report_to:
+            data_total = [[avg_time_per_step, trainable_params]]
+            data_trainable = [[avg_time_per_step, total_params]]
+            wandb.log(
+                {
+                    "model_speed2size1": wandb.plot.scatter(
+                        wandb.Table(
+                            data=data_total,
+                            columns=["Time per step", "Trainable parameters"],
+                        ),
+                        "Time per step",
+                        "Trainable parameters",
+                    ),
+                }
+            )
+            wandb.log(
+                {
+                    "model_speed2size2": wandb.plot.scatter(
+                        wandb.Table(
+                            data=data_trainable,
+                            columns=["Time per step", "Total parameters"],
+                        ),
+                        "Time per step",
+                        "Total parameters",
+                    ),
+                }
+            )
+            wandb.log(
+                {
+                    "test_sample_index": min_diff_idx,
+                }
+            )
 
     # Write model card and (optionally) push to hub
     config_name = (

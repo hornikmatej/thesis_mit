@@ -131,18 +131,24 @@ class DataTrainingArguments:
         },
     )
     train_split_name: str = field(
-        default="train+validation",
+        default="train",
         metadata={
             "help": (
                 "The name of the training data set split to use (via the datasets library). Defaults to "
-                "'train+validation'"
+                "'train'"
             )
         },
     )
     eval_split_name: str = field(
+        default="validation",
+        metadata={
+            "help": "The name of the evaluation data set split to use (via the datasets library). Defaults to 'validation'"
+        },
+    )
+    test_split_name: str = field(
         default="test",
         metadata={
-            "help": "The name of the evaluation data set split to use (via the datasets library). Defaults to 'test'"
+            "help": "The name of the training data set split to use (via the datasets library). Defaults to 'test'"
         },
     )
     audio_column_name: str = field(
@@ -260,4 +266,8 @@ class DataTrainingArguments:
                 " input audio to a sequence of phoneme sequences."
             )
         },
+    )
+    wandb_project: str = field(
+        default="ctc",
+        metadata={"help": "Weights & Biases project name"},
     )
