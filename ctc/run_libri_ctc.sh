@@ -33,5 +33,5 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_ctc.py \
 	--do_train --do_eval --do_predict \
     --trust_remote_code \
     --report_to="wandb" \
-	--wandb_project="seq2seq_encoder-decoder" \
+	--wandb_project="ctc" \
 	# --group_by_length \
