@@ -585,10 +585,8 @@ def main():
                 "fc2",
             ],
             lora_dropout=model_args.lora_dropout,
-            init_lora_weights=(
-                True if model_args.lora_init == "True" else model_args.lora_init
-            ),
-            # use_dora=True,
+            init_lora_weights=True if model_args.lora_init == "True" else model_args.lora_init,
+            use_dora=True,
         )
         model = get_peft_model(model, config)
         for name, param in model.named_parameters():
