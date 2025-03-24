@@ -651,8 +651,6 @@ def main():
         logger.info("*** Evaluate  on validation ***")
         metrics = trainer.evaluate(
             metric_key_prefix="eval_dev",
-            max_length=training_args.generation_max_length,
-            num_beams=training_args.generation_num_beams,
         )
         max_eval_samples = (
             data_args.max_eval_samples
@@ -671,8 +669,6 @@ def main():
         metrics = trainer.evaluate(
             eval_dataset=vectorized_datasets["test"],
             metric_key_prefix="eval_test",
-            max_length=training_args.generation_max_length,
-            num_beams=training_args.generation_num_beams,
         )
 
         metrics["eval_samples"] = len(vectorized_datasets["test"])
