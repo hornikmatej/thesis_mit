@@ -189,6 +189,10 @@ class DataTrainingArguments:
             )
         },
     )
+    sclite_path: str = field(
+        default="/home/azureuser/media-disk/mh_dp/SCTK",
+        metadata={"help": "Path to the SCLITE executable"},
+    )
     chars_to_ignore: Optional[List[str]] = list_field(
         default=None,
         metadata={"help": "A list of characters to remove from the transcripts."},

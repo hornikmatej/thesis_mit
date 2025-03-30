@@ -34,4 +34,5 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_ctc.py \
     --trust_remote_code \
     --report_to="wandb" \
 	--wandb_project="ctc" \
-	# --group_by_length \
+	--group_by_length \
+	--sclite_path="/home/azureuser/media-disk/mh_dp/SCTK/bin/sclite" \
