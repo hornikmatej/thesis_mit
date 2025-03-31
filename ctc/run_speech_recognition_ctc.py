@@ -182,6 +182,7 @@ def create_vocabulary_from_data(
 
     return vocab_dict
 
+
 def parse_sclite_dtl_file(dtl_file_path: str):
     """
     Parses the sclite .dtl output file and extracts relevant metrics,
@@ -263,6 +264,7 @@ def parse_sclite_dtl_file(dtl_file_path: str):
 
     return metrics
 
+
 def count_all_parameters(model):
     """
     Count the number of trainable and total parameters in the model.
@@ -282,8 +284,14 @@ class DebugTrainer(Trainer):
     """
     Custom Trainer that adds debugging capabilities during training and evaluation.
     """
+
     def __init__(
-        self, *args, debug_dir: str = "debug_output", actual_tokenizer=None, sclite_path=str, **kwargs
+        self,
+        *args,
+        debug_dir: str = "debug_output",
+        actual_tokenizer=None,
+        sclite_path=str,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.debug_dir = debug_dir
@@ -313,18 +321,22 @@ class DebugTrainer(Trainer):
             self._run_debug_analysis(eval_output, metric_key_prefix)
 
         return eval_output
-    
+
     def _run_debug_analysis(self, eval_output: Dict[str, Any], prefix: str):
         """
         Run debug analysis after evaluation.
         """
         pred_ids = eval_output.predictions[0]
-        eval_output.label_ids[eval_output.label_ids == -100] = self.actual_tokenizer.pad_token_id
+        eval_output.label_ids[eval_output.label_ids == -100] = (
+            self.actual_tokenizer.pad_token_id
+        )
         pred_str = self.actual_tokenizer.batch_decode(pred_ids)
-        label_str = self.actual_tokenizer.batch_decode(eval_output.label_ids, group_tokens=False)
+        label_str = self.actual_tokenizer.batch_decode(
+            eval_output.label_ids, group_tokens=False
+        )
 
         # Run debug analysis using the data collator
-        batch_idx=f"{prefix}_{self.state.global_step}"
+        batch_idx = f"{prefix}_{self.state.global_step}"
 
         # Save predictions and references to CSV
         debug_path = os.path.join(self.debug_dir, f"debug_batch_{batch_idx}.csv")
@@ -370,6 +382,7 @@ class DebugTrainer(Trainer):
 
         logger.info(f"Debug information saved to {debug_path}")
         logger.info(f"SCLITE analysis files: {sclite_files}")
+
 
 def main():
     # See all possible arguments in src/transformers/training_args.py
@@ -916,7 +929,6 @@ def main():
             f"Average time per training step: {avg_time_per_step:.6f} seconds"
         )
         logger.warning(f"Standard deviation of training steps: {std_dev:.6f} seconds")
-        logger.warning(f"Whole array of time: {total_time}")
 
         # Count parameters
         trainable_params, total_params = count_all_parameters(model)
