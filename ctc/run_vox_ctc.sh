@@ -4,7 +4,7 @@
 	# --gradient_checkpointing \
 CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_ctc.py \
 	--dataset_name="facebook/voxpopuli" \
-	--model_name_or_path="facebook/wav2vec2-large-lv60" \
+	--model_name_or_path="facebook/wav2vec2-base" \
 	--dataset_config_name="en" \
 	--train_split_name="train" \
 	--eval_split_name="validation" \
