@@ -9,17 +9,17 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_ctc.py \
 	--train_split_name="train.100" \
 	--eval_split_name="validation" \
 	--test_split_name="test" \
-	--output_dir="./wav2vec2-large-lv60-librispeech-clean-100h/train_libri" \
+	--output_dir="./wav2vec2-base/train_libri" \
 	--preprocessing_num_workers="4" \
 	--dataloader_num_workers="16" \
 	--dataloader_prefetch_factor="2" \
 	--overwrite_output_dir \
-	--num_train_epochs="3" \
-	--per_device_train_batch_size="32" \
-	--per_device_eval_batch_size="32" \
+	--num_train_epochs="5" \
+	--per_device_train_batch_size="64" \
+	--per_device_eval_batch_size="64" \
 	--gradient_accumulation_steps="1" \
 	--learning_rate="3e-4" \
-	--warmup_steps="500" \
+	--warmup_steps="400" \
 	--eval_strategy="steps" \
 	--text_column_name="text" \
 	--save_strategy="epoch" \
@@ -34,5 +34,4 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_ctc.py \
     --trust_remote_code \
     --report_to="wandb" \
 	--wandb_project="ctc" \
-	--group_by_length \
 	--sclite_path="/home/azureuser/media-disk/mh_dp/SCTK/bin/sclite" \
