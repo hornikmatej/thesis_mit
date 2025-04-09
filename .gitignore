@@ -176,3 +176,7 @@ preprocessed_dataset*
 ctc/wav2vec2-large-lv60-librispeech-clean-100h/*
 ctc/wav2vec2-base/*
 .vscode/
+
+# sraacky pre rnnt
+transducer/libri_dataset
+transducer/exp
