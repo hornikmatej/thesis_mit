@@ -69,7 +69,7 @@ class ModelArguments:
         },
     )
     freeze_feature_encoder: bool = field(
-        default=True,
+        default=False,
         metadata={"help": "Whether to freeze the feature encoder layers of the model."},
     )
     freeze_encoder: bool = field(
