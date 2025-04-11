@@ -1,26 +1,23 @@
 import os
-from functools import partial
 from typing import List
+from collections import namedtuple
 
 import sentencepiece as spm
 import torch
 import torchaudio
 from common import (
-    Batch,
     batch_by_token_count,
-    FunctionalModule,
-    GlobalStatsNormalization,
-    piecewise_linear_log,
     post_process_hypos,
-    spectrogram_transform,
     WarmupLR,
 )
 from pytorch_lightning import LightningModule
-from torchaudio.models import emformer_rnnt_base, RNNTBeamSearch
+from torchaudio.models import RNNTBeamSearch
 from typing import Optional, List, Tuple
 from torchaudio.models.rnnt import _Predictor, _Joiner
 from torchaudio.models import RNNT
-from transformers import Wav2Vec2Model
+from transformers import Wav2Vec2Model, AutoFeatureExtractor
+
+Batch = namedtuple("Batch", ["features", "attention_mask", "feature_lengths", "targets", "target_lengths"])
 
 class Wav2Vec2HiddenStates(Wav2Vec2Model):
     """
@@ -50,14 +47,24 @@ class Wav2vec2RNNT(RNNT):
     def transcribe_streaming(
         self,
         sources: torch.Tensor,
-        source_lengths,
+        attention_mask: Optional[torch.Tensor],
         state: Optional[List[List[torch.Tensor]]],
     ) -> Tuple[torch.Tensor, torch.Tensor, List[List[torch.Tensor]]]:
         raise NotImplementedError("No streaming for Wav2Vec2Model.")
     
+    @torch.jit.export
+    def transcribe(
+        self,
+        sources: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        # TODO: for this RNNTBeamSearch needs to be modified to accept attention_mask
+        return self.transcriber(input_values=sources, attention_mask=attention_mask)
+
     def forward(
         self,
         sources: torch.Tensor,
+        attention_mask: Optional[torch.Tensor], # Expects attention_mask from feature_extractor
         source_lengths,
         targets: torch.Tensor,
         target_lengths: torch.Tensor,
@@ -65,8 +72,9 @@ class Wav2vec2RNNT(RNNT):
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, List[List[torch.Tensor]]]:
         source_encodings = self.transcriber(
             input_values=sources,
-        )
-        source_lengths = torch.full((source_encodings.size(0),), source_encodings.size(1), dtype=torch.int32)
+            attention_mask=attention_mask,
+        ) # [B, T_encoded, D_hidden]
+        # source_lengths = torch.full((source_encodings.size(0),), source_encodings.size(1), dtype=torch.int32)
         target_encodings, target_lengths, predictor_state = self.predictor(
             input=targets,
             lengths=target_lengths,
@@ -88,7 +96,7 @@ class Wav2vec2RNNT(RNNT):
 
 def wav2vec2_rnnt_model(
     *,
-    encoding_dim: int,
+    encoding_dim: int, # Wav2Vec2-base output dim
     num_symbols: int,
     symbol_embedding_dim: int,
     num_lstm_layers: int,
@@ -158,7 +166,6 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         *,
         librispeech_path: str,
         sp_model_path: str,
-        global_stats_path: str,
     ):
         super().__init__()
 
@@ -172,72 +179,85 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
             lstm_dropout=0.3,
         )
         self.loss = torchaudio.transforms.RNNTLoss(reduction="sum", clamp=1.0)
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=5e-4, betas=(0.9, 0.999), eps=1e-8)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=5e-4, eps=1e-8) # betas=(0.9, 0.999)
         self.warmup_lr_scheduler = WarmupLR(self.optimizer, 1000)
 
-        self.train_data_pipeline = torch.nn.Sequential(
-            FunctionalModule(piecewise_linear_log),
-            GlobalStatsNormalization(global_stats_path),
-            FunctionalModule(partial(torch.transpose, dim0=1, dim1=2)),
-            torchaudio.transforms.FrequencyMasking(27),
-            torchaudio.transforms.FrequencyMasking(27),
-            torchaudio.transforms.TimeMasking(100, p=0.2),
-            torchaudio.transforms.TimeMasking(100, p=0.2),
-            FunctionalModule(partial(torch.nn.functional.pad, pad=(0, 4))),
-            FunctionalModule(partial(torch.transpose, dim0=1, dim1=2)),
-        )
-        self.valid_data_pipeline = torch.nn.Sequential(
-            FunctionalModule(piecewise_linear_log),
-            GlobalStatsNormalization(global_stats_path),
-            FunctionalModule(partial(torch.transpose, dim0=1, dim1=2)),
-            FunctionalModule(partial(torch.nn.functional.pad, pad=(0, 4))),
-            FunctionalModule(partial(torch.transpose, dim0=1, dim1=2)),
-        )
+        # --- Feature Extractor ---
+        self.feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
+        self.sampling_rate = self.feature_extractor.sampling_rate
+
+        self.train_data_pipeline = None
+        self.valid_data_pipeline = None
 
         self.librispeech_path = librispeech_path
 
         self.sp_model = spm.SentencePieceProcessor(model_file=sp_model_path)
         self.blank_idx = self.sp_model.get_piece_size()
+        print(f"Blank index: {self.blank_idx}")
 
     def _extract_labels(self, samples: List):
         targets = [self.sp_model.encode(sample[2].lower()) for sample in samples]
         lengths = torch.tensor([len(elem) for elem in targets]).to(dtype=torch.int32)
+        # Correct padding value for RNNT loss
         targets = torch.nn.utils.rnn.pad_sequence(
             [torch.tensor(elem) for elem in targets],
             batch_first=True,
             padding_value=1.0,
         ).to(dtype=torch.int32)
         return targets, lengths
+    
+    def _extract_features(self, samples: List):
+        """Extracts features using Wav2Vec2 feature extractor."""
+        raw_audio = [sample[0].squeeze().numpy() for sample in samples] # Assuming sample[0] is waveform tensor
+        # assume all samples in the batch have the target sampling rate
+        feature_lengths = torch.tensor([len(audio) for audio in raw_audio], dtype=torch.int32) # length in samples
 
-    def _train_extract_features(self, samples: List):
-        mel_features = [spectrogram_transform(sample[0].squeeze()).transpose(1, 0) for sample in samples]
-        features = torch.nn.utils.rnn.pad_sequence(mel_features, batch_first=True)
-        features = self.train_data_pipeline(features)
-        lengths = torch.tensor([elem.shape[0] for elem in mel_features], dtype=torch.int32)
-        return features, lengths
+        # Process batch with feature extractor
+        processed = self.feature_extractor(
+            raw_audio,
+            sampling_rate=self.sampling_rate,
+            return_tensors="pt",
+            padding=True,
+            return_attention_mask=True
+        )
+        features = processed.input_values
+        attention_mask = processed.attention_mask
+        return features, attention_mask, feature_lengths
 
-    def _valid_extract_features(self, samples: List):
-        mel_features = [spectrogram_transform(sample[0].squeeze()).transpose(1, 0) for sample in samples]
-        features = torch.nn.utils.rnn.pad_sequence(mel_features, batch_first=True)
-        features = self.valid_data_pipeline(features)
-        lengths = torch.tensor([elem.shape[0] for elem in mel_features], dtype=torch.int32)
-        return features, lengths
+    _train_extract_features = _extract_features
+    _valid_extract_features = _extract_features
+
+    def _collate_fn(self, samples: List):
+        """Collates samples into a batch using Wav2Vec2 feature extraction."""
+        if not samples:
+            return None
+        
+        features, attention_mask, feature_lengths = self._extract_features(samples)
+
+        targets, target_lengths = self._extract_labels(samples)
+        return Batch(features, attention_mask, feature_lengths, targets, target_lengths)
 
     def _train_collate_fn(self, samples: List):
-        features, feature_lengths = self._train_extract_features(samples)
-        targets, target_lengths = self._extract_labels(samples)
-        return Batch(features, feature_lengths, targets, target_lengths)
+         return self._collate_fn(samples)
 
     def _valid_collate_fn(self, samples: List):
-        features, feature_lengths = self._valid_extract_features(samples)
-        targets, target_lengths = self._extract_labels(samples)
-        return Batch(features, feature_lengths, targets, target_lengths)
+         return self._collate_fn(samples)
 
     def _test_collate_fn(self, samples: List):
-        return self._valid_collate_fn(samples), [sample[2] for sample in samples]
+        # Test data usually doesn't need shuffling or complex batching, process one by one
+        # However, if using CustomDataset for test, it might return batches
+        if isinstance(samples[0], list): # Handle case where CustomDataset returns list of samples
+             batch_samples = samples[0]
+        else: # Handle case where DataLoader returns single sample in a list
+             batch_samples = samples
+
+        batch = self._collate_fn(batch_samples, is_train=False)
+        transcripts = [s[2] for s in batch_samples]
+        return batch, transcripts # Return batch and reference transcripts
 
     def _step(self, batch, batch_idx, step_type):
         if batch is None:
+            print(f"Warning: Skipping empty batch at index {batch_idx} during {step_type}")
             return None
 
         prepended_targets = batch.targets.new_empty([batch.targets.size(0), batch.targets.size(1) + 1])
@@ -245,13 +265,15 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         prepended_targets[:, 0] = self.blank_idx
         prepended_target_lengths = batch.target_lengths + 1
         output, src_lengths, _, _ = self.model(
-            batch.features,
-            batch.feature_lengths,
-            prepended_targets,
-            prepended_target_lengths,
+            sources=batch.features,
+            attention_mask=batch.attention_mask,
+            source_lengths=batch.feature_lengths,
+            targets=prepended_targets,
+            target_lengths=prepended_target_lengths,
         )
+        # Potential reduction issue if batch_size is 1
         loss = self.loss(output, batch.targets, src_lengths, batch.target_lengths)
-        self.log(f"Losses/{step_type}_loss", loss, on_step=True, on_epoch=True)
+        self.log(f"Losses/{step_type}_loss", loss, on_step=True, on_epoch=True, batch_size=batch.targets.size(0), prog_bar=True)
         return loss
 
     def configure_optimizers(self):
@@ -263,8 +285,13 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         )
 
     def forward(self, batch: Batch):
+        if batch is None:
+            print("Warning: Skipping empty batch during forward pass")
+            return []
+        
+        self.model.eval()
         decoder = RNNTBeamSearch(self.model, self.blank_idx)
-        hypotheses = decoder(batch.features.to(self.device), batch.feature_lengths.to(self.device), 20)
+        hypotheses = decoder(batch.features.to(self.device), batch.feature_lengths.to(self.device), 15)
         return post_process_hypos(hypotheses, self.sp_model)[0][0]
 
     def training_step(self, batch: Batch, batch_idx):
@@ -274,8 +301,10 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         return self._step(batch, batch_idx, "val")
 
     def test_step(self, batch_tuple, batch_idx):
+        # TODO edit
         return self._step(batch_tuple[0], batch_idx, "test")
 
+    # --- Dataloaders ---
     def train_dataloader(self):
         dataset = torch.utils.data.ConcatDataset(
             [
@@ -297,8 +326,9 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
             dataset,
             batch_size=None,
             collate_fn=self._train_collate_fn,
-            num_workers=10,
+            num_workers=8,
             shuffle=True,
+            pin_memory=True,
         )
         return dataloader
 
@@ -319,11 +349,12 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
             dataset,
             batch_size=None,
             collate_fn=self._valid_collate_fn,
-            num_workers=10,
+            num_workers=8,
+            pin_memory=True,
         )
         return dataloader
 
     def test_dataloader(self):
         dataset = torchaudio.datasets.LIBRISPEECH(self.librispeech_path, url="test-clean", download=True,)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, collate_fn=self._test_collate_fn)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, collate_fn=self._test_collate_fn, pin_memory=True)
         return dataloader

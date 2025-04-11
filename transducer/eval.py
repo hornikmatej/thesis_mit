@@ -11,8 +11,9 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 
 import torch
 import torchaudio
-from common import MODEL_TYPE_LIBRISPEECH, MODEL_TYPE_MUSTC, MODEL_TYPE_TEDLIUM3
+from common import MODEL_TYPE_LIBRISPEECH
 from librispeech.lightning import LibriSpeechRNNTModule
+from librispeech.lightning_wav2vec2 import LibriSpeechRNNTModuleWav2Vec2
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ def get_lightning_module(args):
 def parse_args():
     parser = ArgumentParser(description=__doc__, formatter_class=RawTextHelpFormatter)
     parser.add_argument(
-        "--model-type", type=str, choices=[MODEL_TYPE_LIBRISPEECH, MODEL_TYPE_TEDLIUM3, MODEL_TYPE_MUSTC], required=True
+        "--model-type", type=str, choices=[MODEL_TYPE_LIBRISPEECH], required=True
     )
     parser.add_argument(
         "--checkpoint-path",
@@ -83,28 +84,17 @@ def parse_args():
         type=pathlib.Path,
         help="Path to SentencePiece model.",
     )
-    parser.add_argument(
-        "--use-cuda",
-        action="store_true",
-        default=False,
-        help="Run using CUDA.",
-    )
-    parser.add_argument("--debug", action="store_true", help="whether to use debug level for logging")
     return parser.parse_args()
 
 
-def init_logger(debug):
-    fmt = "%(asctime)s %(message)s" if debug else "%(message)s"
-    level = logging.DEBUG if debug else logging.INFO
+def init_logger():
+    fmt = "%(message)s"
+    level = logging.INFO
     logging.basicConfig(format=fmt, level=level, datefmt="%Y-%m-%d %H:%M:%S")
 
 
-def cli_main():
+if __name__ == "__main__":
     args = parse_args()
-    init_logger(args.debug)
+    init_logger()
     model = get_lightning_module(args).to(device="cuda")
     run_eval(model, args.model_type)
-
-
-if __name__ == "__main__":
-    cli_main()

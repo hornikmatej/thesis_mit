@@ -3,7 +3,7 @@ import logging
 import pathlib
 from argparse import ArgumentParser
 
-from common import MODEL_TYPE_LIBRISPEECH, MODEL_TYPE_MUSTC, MODEL_TYPE_TEDLIUM3
+from common import MODEL_TYPE_LIBRISPEECH
 from librispeech.lightning import LibriSpeechRNNTModule
 from librispeech.lightning_wav2vec2 import LibriSpeechRNNTModuleWav2Vec2
 from pytorch_lightning import Trainer
@@ -56,7 +56,7 @@ def get_lightning_module(args):
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument(
-        "--model-type", type=str, choices=[MODEL_TYPE_LIBRISPEECH, MODEL_TYPE_TEDLIUM3, MODEL_TYPE_MUSTC], required=True
+        "--model-type", type=str, choices=[MODEL_TYPE_LIBRISPEECH], required=True
     )
     parser.add_argument(
         "--global-stats-path",
@@ -84,18 +84,6 @@ def parse_args():
         help="Directory to save checkpoints and logs to. (Default: './exp')",
     )
     parser.add_argument(
-        "--num-nodes",
-        default=1,
-        type=int,
-        help="Number of nodes to use for training. (Default: 4)",
-    )
-    parser.add_argument(
-        "--gpus",
-        default=1,
-        type=int,
-        help="Number of GPUs per node to use for training. (Default: 8)",
-    )
-    parser.add_argument(
         "--epochs",
         default=120,
         type=int,
@@ -104,23 +92,18 @@ def parse_args():
     parser.add_argument(
         "--gradient-clip-val", default=10.0, type=float, help="Value to clip gradient values to. (Default: 10.0)"
     )
-    parser.add_argument("--debug", action="store_true", help="whether to use debug level for logging")
     return parser.parse_args()
 
 
-def init_logger(debug):
-    fmt = "%(asctime)s %(message)s" if debug else "%(message)s"
-    level = logging.DEBUG if debug else logging.INFO
+def init_logger():
+    fmt = "%(message)s"
+    level = logging.INFO
     logging.basicConfig(format=fmt, level=level, datefmt="%Y-%m-%d %H:%M:%S")
 
 
-def cli_main():
+if __name__ == "__main__":
     args = parse_args()
-    init_logger(args.debug)
+    init_logger()
     model = get_lightning_module(args)
     trainer = get_trainer(args)
     trainer.fit(model)
-
-
-if __name__ == "__main__":
-    cli_main()
