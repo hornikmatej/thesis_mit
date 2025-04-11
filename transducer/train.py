@@ -5,6 +5,7 @@ from argparse import ArgumentParser
 
 from common import MODEL_TYPE_LIBRISPEECH, MODEL_TYPE_MUSTC, MODEL_TYPE_TEDLIUM3
 from librispeech.lightning import LibriSpeechRNNTModule
+from librispeech.lightning_wav2vec2 import LibriSpeechRNNTModuleWav2Vec2
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 
