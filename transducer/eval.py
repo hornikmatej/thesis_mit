@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Evaluate the lightning module by loading the checkpoint, the SentencePiece model, and the global_stats.json.
-
 Example:
 python eval.py --model-type tedlium3 --checkpoint-path ./experiments/checkpoints/epoch=119-step=254999.ckpt
     --dataset-path ./datasets/tedlium --sp-model-path ./spm_bpe_500.model
@@ -11,7 +10,6 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 
 import torch
 import torchaudio
-from common import MODEL_TYPE_LIBRISPEECH
 from librispeech.lightning import LibriSpeechRNNTModule
 from librispeech.lightning_wav2vec2 import LibriSpeechRNNTModuleWav2Vec2
 
@@ -36,32 +34,38 @@ def run_eval_subset(model, dataloader, subset):
     logger.info(f"Final WER for {subset} set: {total_edit_distance / total_length}")
 
 
-def run_eval(model, model_type):
-    if model_type == MODEL_TYPE_LIBRISPEECH:
-        test_dataloader = model.test_dataloader()
-        dev_dataloader = model.val_dataloader()
-        run_eval_subset(model, test_dataloader, "test")
-        run_eval_subset(model, dev_dataloader, "dev")
-    else:
-        raise ValueError(f"Encountered unsupported model type {model_type}.")
+def run_eval(model):
+    test_dataloader = model.test_dataloader()
+    # dev_dataloader = model.val_dataloader()
+    # run_eval_subset(model, dev_dataloader, "dev")
+    run_eval_subset(model, test_dataloader, "test")
+
 
 
 def get_lightning_module(args):
-    if args.model_type == MODEL_TYPE_LIBRISPEECH:
+    if args.mtype == "emformer":
         return LibriSpeechRNNTModule.load_from_checkpoint(
             args.checkpoint_path,
-            librispeech_path=str(args.dataset_path),
+            librispeech_path="libri_dataset/",
             sp_model_path=str(args.sp_model_path),
             global_stats_path=str(args.global_stats_path),
         )
-    else:
-        raise ValueError(f"Encountered unsupported model type {args.model_type}.")
+    elif args.mtype == "wav2vec2":
+        return LibriSpeechRNNTModuleWav2Vec2.load_from_checkpoint(
+            args.checkpoint_path,
+            librispeech_path="libri_dataset/",
+            sp_model_path=str(args.sp_model_path),
+        )
 
 
 def parse_args():
     parser = ArgumentParser(description=__doc__, formatter_class=RawTextHelpFormatter)
     parser.add_argument(
-        "--model-type", type=str, choices=[MODEL_TYPE_LIBRISPEECH], required=True
+        "--mtype",
+        default="emformer",
+        type=str,
+        choices=["emformer", "wav2vec2"],
+        help="Model type to use. (Default: 'emformer')",
     )
     parser.add_argument(
         "--checkpoint-path",
@@ -97,4 +101,4 @@ if __name__ == "__main__":
     args = parse_args()
     init_logger()
     model = get_lightning_module(args).to(device="cuda")
-    run_eval(model, args.model_type)
+    run_eval(model)

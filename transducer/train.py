@@ -60,14 +60,6 @@ def verify_model_setup(model):
 
 def get_trainer(args):
     checkpoint_dir = args.exp_dir / "checkpoints"
-    checkpoint = ModelCheckpoint(
-        checkpoint_dir,
-        monitor="Losses/val_loss",
-        mode="min",
-        save_top_k=5,
-        save_weights_only=True,
-        verbose=True,
-    )
     train_checkpoint = ModelCheckpoint(
         checkpoint_dir,
         monitor="Losses/train_loss",
@@ -80,7 +72,6 @@ def get_trainer(args):
     wandb_logger = WandbLogger(project="librispeech-rnnt", log_model="all") # Set your project name
 
     callbacks = [
-        checkpoint,
         train_checkpoint,
     ]
     return Trainer(
@@ -91,8 +82,9 @@ def get_trainer(args):
         accumulate_grad_batches=2,
         gradient_clip_val=args.gradient_clip_val,
         callbacks=callbacks,
-        logger=wandb_logger, # Add the logger to the Trainer
-        # precision="16" # Restore precision setting if it was used
+        val_check_interval=100,
+        logger=wandb_logger,
+        precision="16-mixed",
     )
 
 
@@ -124,7 +116,6 @@ def parse_args():
         default=pathlib.Path("global_stats.json"),
         type=pathlib.Path,
         help="Path to JSON file containing feature means and stddevs.",
-        required=True,
     )
     parser.add_argument(
         "--sp-model-path",
@@ -145,7 +136,7 @@ def parse_args():
         help="Number of epochs to train for. (Default: 1)",
     )
     parser.add_argument(
-        "--gradient-clip-val", default=10.0, type=float, help="Value to clip gradient values to. (Default: 10.0)"
+        "--gradient-clip-val", default=2.0, type=float, help="Value to clip gradient values to. (Default: 2.0)"
     )
     return parser.parse_args()
 

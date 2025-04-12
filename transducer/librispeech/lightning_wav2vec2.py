@@ -56,10 +56,10 @@ class Wav2vec2RNNT(RNNT):
     def transcribe(
         self,
         sources: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
+        sources_lengths: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # TODO: for this RNNTBeamSearch needs to be modified to accept attention_mask
-        return self.transcriber(input_values=sources, attention_mask=attention_mask)
+        return self.transcriber(input_values=sources.squeeze(1)), sources_lengths
 
     def forward(
         self,
@@ -170,6 +170,7 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         sort_by_length: bool = True,  # Whether to sort samples by length
     ):
         super().__init__()
+        self.validation_step_outputs = []
 
         self.model = wav2vec2_rnnt_model(
             encoding_dim=768, # Wav2Vec2-base output dim
@@ -216,7 +217,7 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         raw_audio = [sample[0].squeeze().numpy() for sample in samples] # Assuming sample[0] is waveform tensor
         # assume all samples in the batch have the target sampling rate
         # // 320 because the feature extractor sub-samples by 320 for wav2vec2-base
-        # feature_lengths = torch.tensor([(len(audio) - 1) // 320 for audio in raw_audio], dtype=torch.int32) # length in samples
+        feature_lengths = torch.tensor([len(audio) for audio in raw_audio], dtype=torch.int32) # length in samples
 
         # Process batch with feature extractor
         processed = self.feature_extractor(
@@ -228,7 +229,7 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         )
         features = processed.input_values
         attention_mask = processed.attention_mask
-        return features, attention_mask, None
+        return features, attention_mask, feature_lengths
 
     _train_extract_features = _extract_features
     _valid_extract_features = _extract_features
@@ -284,7 +285,8 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         # print(f"Source lenghts: {src_lengths}, Target lengths: {batch.target_lengths}")
         # Potential reduction issue if batch_size is 1
         loss = self.loss(output, batch.targets, src_lengths, batch.target_lengths)
-        self.log(f"Losses/{step_type}_loss", loss, on_step=True, on_epoch=True, batch_size=batch.targets.size(0), prog_bar=True)
+        if step_type == "train":
+            self.log(f"Losses/{step_type}_loss", loss, on_step=True, on_epoch=True, batch_size=batch.targets.size(0), prog_bar=True)
         return loss
 
     def configure_optimizers(self):
@@ -299,21 +301,37 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         if batch is None:
             print("Warning: Skipping empty batch during forward pass")
             return []
-        
         self.model.eval()
-        decoder = RNNTBeamSearch(self.model, self.blank_idx)
-        hypotheses = decoder(batch.features.to(self.device), batch.feature_lengths.to(self.device), 15)
+        decoder = RNNTBeamSearch(self.model, self.blank_idx, step_max_tokens=128)
+        hypotheses = decoder(batch.features.to(self.device), batch.feature_lengths.to(self.device), 5)
         return post_process_hypos(hypotheses, self.sp_model)[0][0]
+
+    def on_after_backward(self):
+        total_norm = 0.0
+        for name, param in self.named_parameters():
+            if param.grad is not None:
+                total_norm += param.grad.data.norm(2).item() ** 2
+        total_norm = total_norm ** 0.5
+        # Log gradient norm. Adjust logging arguments as needed.
+        self.log("grad_norm", total_norm, on_step=True, on_epoch=True, prog_bar=True)
 
     def training_step(self, batch: Batch, batch_idx):
         return self._step(batch, batch_idx, "train")
 
     def validation_step(self, batch, batch_idx):
-        return self._step(batch, batch_idx, "val")
+        loss = self._step(batch, batch_idx, "val")
+        self.validation_step_outputs.append(loss.detach())
+        return loss
+    
+    def on_validation_epoch_end(self):
+        if self.validation_step_outputs:
+            avg_loss = torch.mean(torch.stack(self.validation_step_outputs))
+            self.log("Losses/val_loss", avg_loss, prog_bar=True)
+            self.validation_step_outputs.clear()
+        else:
+            print("Warning: No validation step outputs to average.")
 
     def test_step(self, batch_tuple, batch_idx):
-        # Restore original test_step logic (assuming it used batch_tuple[0])
-        # TODO edit (original comment)
         return self._step(batch_tuple[0], batch_idx, "test")
 
     # --- Dataloaders ---
