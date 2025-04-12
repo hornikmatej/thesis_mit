@@ -151,6 +151,8 @@ class LibriSpeechRNNTModule(LightningModule):
             prepended_targets,
             prepended_target_lengths,
         )
+        print(f"Output shape: {output.shape}, Source lengths: {src_lengths.shape}, Targets shape: {batch.targets.shape}, Target lengths: {batch.target_lengths.shape}")
+        print(f"Source lenghts: {src_lengths}, Target lengths: {batch.target_lengths}")
         loss = self.loss(output, batch.targets, src_lengths, batch.target_lengths)
         self.log(f"Losses/{step_type}_loss", loss, on_step=True, on_epoch=True)
         return loss

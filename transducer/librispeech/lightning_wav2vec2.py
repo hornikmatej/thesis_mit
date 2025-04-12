@@ -74,7 +74,7 @@ class Wav2vec2RNNT(RNNT):
             input_values=sources,
             attention_mask=attention_mask,
         ) # [B, T_encoded, D_hidden]
-        # source_lengths = torch.full((source_encodings.size(0),), source_encodings.size(1), dtype=torch.int32)
+        source_lengths = torch.full((source_encodings.size(0),), source_encodings.size(1), dtype=torch.int32).to(source_encodings.device)
         target_encodings, target_lengths, predictor_state = self.predictor(
             input=targets,
             lengths=target_lengths,
@@ -118,6 +118,7 @@ def wav2vec2_rnnt_model(
     joiner = _Joiner(encoding_dim, num_symbols)
     return Wav2vec2RNNT(encoder, predictor, joiner)
 
+# Re-introduce CustomDataset
 class CustomDataset(torch.utils.data.Dataset):
     r"""Sort LibriSpeech samples by target length and batch to max token count."""
 
@@ -166,6 +167,7 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         *,
         librispeech_path: str,
         sp_model_path: str,
+        sort_by_length: bool = True,  # Whether to sort samples by length
     ):
         super().__init__()
 
@@ -179,8 +181,9 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
             lstm_dropout=0.3,
         )
         self.loss = torchaudio.transforms.RNNTLoss(reduction="sum", clamp=1.0)
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=5e-4, eps=1e-8) # betas=(0.9, 0.999)
-        self.warmup_lr_scheduler = WarmupLR(self.optimizer, 1000)
+        # Restore original optimizer and scheduler settings
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=2e-4, eps=1e-8) # betas=(0.9, 0.999)
+        self.warmup_lr_scheduler = WarmupLR(self.optimizer, 200)
 
         # --- Feature Extractor ---
         self.feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
@@ -190,6 +193,8 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         self.valid_data_pipeline = None
 
         self.librispeech_path = librispeech_path
+        # Removed self.batch_size
+        self.sort_by_length = sort_by_length
 
         self.sp_model = spm.SentencePieceProcessor(model_file=sp_model_path)
         self.blank_idx = self.sp_model.get_piece_size()
@@ -210,7 +215,8 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         """Extracts features using Wav2Vec2 feature extractor."""
         raw_audio = [sample[0].squeeze().numpy() for sample in samples] # Assuming sample[0] is waveform tensor
         # assume all samples in the batch have the target sampling rate
-        feature_lengths = torch.tensor([len(audio) for audio in raw_audio], dtype=torch.int32) # length in samples
+        # // 320 because the feature extractor sub-samples by 320 for wav2vec2-base
+        # feature_lengths = torch.tensor([(len(audio) - 1) // 320 for audio in raw_audio], dtype=torch.int32) # length in samples
 
         # Process batch with feature extractor
         processed = self.feature_extractor(
@@ -222,7 +228,7 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         )
         features = processed.input_values
         attention_mask = processed.attention_mask
-        return features, attention_mask, feature_lengths
+        return features, attention_mask, None
 
     _train_extract_features = _extract_features
     _valid_extract_features = _extract_features
@@ -237,12 +243,14 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         targets, target_lengths = self._extract_labels(samples)
         return Batch(features, attention_mask, feature_lengths, targets, target_lengths)
 
+    # Restore original train/valid collate functions
     def _train_collate_fn(self, samples: List):
          return self._collate_fn(samples)
 
     def _valid_collate_fn(self, samples: List):
          return self._collate_fn(samples)
 
+    # Restore original test collate function logic
     def _test_collate_fn(self, samples: List):
         # Test data usually doesn't need shuffling or complex batching, process one by one
         # However, if using CustomDataset for test, it might return batches
@@ -251,7 +259,8 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         else: # Handle case where DataLoader returns single sample in a list
              batch_samples = samples
 
-        batch = self._collate_fn(batch_samples, is_train=False)
+        # Pass is_train=False if needed by _collate_fn, otherwise remove
+        batch = self._collate_fn(batch_samples) 
         transcripts = [s[2] for s in batch_samples]
         return batch, transcripts # Return batch and reference transcripts
 
@@ -271,6 +280,8 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
             targets=prepended_targets,
             target_lengths=prepended_target_lengths,
         )
+        # print(f"Output shape: {output.shape}, Source lengths: {src_lengths.shape}, Targets shape: {batch.targets.shape}, Target lengths: {batch.target_lengths.shape}")
+        # print(f"Source lenghts: {src_lengths}, Target lengths: {batch.target_lengths}")
         # Potential reduction issue if batch_size is 1
         loss = self.loss(output, batch.targets, src_lengths, batch.target_lengths)
         self.log(f"Losses/{step_type}_loss", loss, on_step=True, on_epoch=True, batch_size=batch.targets.size(0), prog_bar=True)
@@ -301,60 +312,102 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         return self._step(batch, batch_idx, "val")
 
     def test_step(self, batch_tuple, batch_idx):
-        # TODO edit
+        # Restore original test_step logic (assuming it used batch_tuple[0])
+        # TODO edit (original comment)
         return self._step(batch_tuple[0], batch_idx, "test")
 
     # --- Dataloaders ---
+    # Restore original dataloader logic
     def train_dataloader(self):
-        dataset = torch.utils.data.ConcatDataset(
-            [
-                # CustomDataset(
-                #     torchaudio.datasets.LIBRISPEECH(self.librispeech_path, url="train-clean-360"),
-                #     1000,
-                # ),
-                CustomDataset(
+        if self.sort_by_length:
+            # Using CustomDataset or a similar sorted batching strategy
+            dataset = torch.utils.data.ConcatDataset(
+                [
+                    CustomDataset( # Use CustomDataset again
+                        torchaudio.datasets.LIBRISPEECH(self.librispeech_path, url="train-clean-100", download=True,),
+                        1000, # Example token limit
+                    ),
+                    # Add other datasets wrapped in CustomDataset if needed
+                ]
+            )
+            dataloader = torch.utils.data.DataLoader(
+                dataset,
+                batch_size=None,  # No additional batching since dataset returns batches
+                collate_fn=self._train_collate_fn,
+                num_workers=8,
+                shuffle=False,  # No shuffle as the dataset is already sorted/batched
+                pin_memory=True,
+            )
+        else:
+            # Use standard PyTorch DataLoader batching (requires _train_collate_fn_single)
+            dataset = torch.utils.data.ConcatDataset(
+                [
                     torchaudio.datasets.LIBRISPEECH(self.librispeech_path, url="train-clean-100", download=True,),
-                    1000,
-                ),
-                # CustomDataset(
-                #     torchaudio.datasets.LIBRISPEECH(self.librispeech_path, url="train-other-500"),
-                #     1000,
-                # ),
-            ]
-        )
-        dataloader = torch.utils.data.DataLoader(
-            dataset,
-            batch_size=None,
-            collate_fn=self._train_collate_fn,
-            num_workers=8,
-            shuffle=True,
-            pin_memory=True,
-        )
+                ]
+            )
+            dataloader = torch.utils.data.DataLoader(
+                dataset,
+                batch_size=32, # Example batch size if not sorting
+                collate_fn=self._train_collate_fn_single, # Use the single-sample collate
+                num_workers=8,
+                shuffle=True,
+                pin_memory=True,
+            )
         return dataloader
 
     def val_dataloader(self):
-        dataset = torch.utils.data.ConcatDataset(
-            [
-                CustomDataset(
+        if self.sort_by_length:
+            # Using CustomDataset or a similar sorted batching strategy
+            dataset = torch.utils.data.ConcatDataset(
+                [
+                     CustomDataset( # Use CustomDataset again
+                        torchaudio.datasets.LIBRISPEECH(self.librispeech_path, url="dev-clean", download=True,),
+                        1000, # Example token limit
+                    ),
+                    # Add other datasets wrapped in CustomDataset if needed
+                ]
+            )
+            dataloader = torch.utils.data.DataLoader(
+                dataset,
+                batch_size=None,
+                collate_fn=self._valid_collate_fn,
+                num_workers=8,
+                pin_memory=True,
+            )
+        else:
+            # Use standard PyTorch DataLoader batching (requires _valid_collate_fn_single)
+            dataset = torch.utils.data.ConcatDataset(
+                [
                     torchaudio.datasets.LIBRISPEECH(self.librispeech_path, url="dev-clean", download=True,),
-                    1000,
-                ),
-                # CustomDataset(
-                #     torchaudio.datasets.LIBRISPEECH(self.librispeech_path, url="dev-other"),
-                #     1000,
-                # ),
-            ]
-        )
-        dataloader = torch.utils.data.DataLoader(
-            dataset,
-            batch_size=None,
-            collate_fn=self._valid_collate_fn,
-            num_workers=8,
-            pin_memory=True,
-        )
+                ]
+            )
+            dataloader = torch.utils.data.DataLoader(
+                dataset,
+                batch_size=32, # Example batch size if not sorting
+                collate_fn=self._valid_collate_fn_single, # Use the single-sample collate
+                num_workers=8,
+                shuffle=False,
+                pin_memory=True,
+            )
         return dataloader
+    
+    # Re-introduce single-sample collate functions if needed for sort_by_length=False case
+    def _train_collate_fn_single(self, samples: List):
+        """Collate function for individual samples when not using CustomDataset"""
+        return self._collate_fn(samples)
+    
+    def _valid_collate_fn_single(self, samples: List):
+        """Collate function for individual samples when not using CustomDataset"""
+        return self._collate_fn(samples)
 
     def test_dataloader(self):
+        # Restore original test dataloader (assuming it didn't use batch_size directly)
         dataset = torchaudio.datasets.LIBRISPEECH(self.librispeech_path, url="test-clean", download=True,)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, collate_fn=self._test_collate_fn, pin_memory=True)
+        dataloader = torch.utils.data.DataLoader(
+            dataset, 
+            batch_size=1, # Often test is run sample by sample or with custom batching
+            collate_fn=self._test_collate_fn, 
+            pin_memory=True,
+            num_workers=8, # Added num_workers for consistency
+        )
         return dataloader
