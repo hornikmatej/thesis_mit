@@ -183,7 +183,7 @@ class LibriSpeechRNNTModuleWav2Vec2(LightningModule):
         )
         self.loss = torchaudio.transforms.RNNTLoss(reduction="sum", clamp=1.0)
         # Restore original optimizer and scheduler settings
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=2e-4, eps=1e-8) # betas=(0.9, 0.999)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=3e-4, eps=1e-8) # betas=(0.9, 0.999)
         self.warmup_lr_scheduler = WarmupLR(self.optimizer, 200)
 
         # --- Feature Extractor ---

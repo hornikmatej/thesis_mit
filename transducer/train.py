@@ -11,6 +11,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 from dotenv import load_dotenv
 
+torch.set_float32_matmul_precision("medium")
 
 def verify_model_setup(model):
     """Verify that the model is correctly set up before training."""
@@ -77,12 +78,12 @@ def get_trainer(args):
     return Trainer(
         default_root_dir=args.exp_dir,
         max_epochs=args.epochs,
-        log_every_n_steps=1,
+        log_every_n_steps=8,
         accelerator="gpu",
-        accumulate_grad_batches=2,
+        accumulate_grad_batches=8,
         gradient_clip_val=args.gradient_clip_val,
         callbacks=callbacks,
-        val_check_interval=100,
+        val_check_interval=2500,
         logger=wandb_logger,
         precision="16-mixed",
     )
