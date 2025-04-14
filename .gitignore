@@ -180,3 +180,5 @@ ctc/wav2vec2-base/*
 # sraacky pre rnnt
 transducer/libri_dataset
 transducer/exp
+
+bart/bart-base

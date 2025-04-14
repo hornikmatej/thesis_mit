@@ -85,7 +85,7 @@ def get_trainer(args):
         callbacks=callbacks,
         val_check_interval=2500,
         logger=wandb_logger,
-        precision="16-mixed",
+        # precision="16-mixed",
     )
 
 
