@@ -70,6 +70,7 @@ class LibriSpeechRNNTModule(LightningModule):
         global_stats_path: str,
     ):
         super().__init__()
+        self.validation_step_outputs = []
 
         self.model = emformer_rnnt_base(num_symbols=4097)
         self.loss = torchaudio.transforms.RNNTLoss(reduction="sum", clamp=1.0)
@@ -151,11 +152,20 @@ class LibriSpeechRNNTModule(LightningModule):
             prepended_targets,
             prepended_target_lengths,
         )
-        print(f"Output shape: {output.shape}, Source lengths: {src_lengths.shape}, Targets shape: {batch.targets.shape}, Target lengths: {batch.target_lengths.shape}")
-        print(f"Source lenghts: {src_lengths}, Target lengths: {batch.target_lengths}")
+        # print(f"Output shape: {output.shape}, Source lengths: {src_lengths.shape}, Targets shape: {batch.targets.shape}, Target lengths: {batch.target_lengths.shape}")
+        # print(f"Source lenghts: {src_lengths}, Target lengths: {batch.target_lengths}")
         loss = self.loss(output, batch.targets, src_lengths, batch.target_lengths)
-        self.log(f"Losses/{step_type}_loss", loss, on_step=True, on_epoch=True)
+        if step_type == "train":
+            self.log(f"Losses/{step_type}_loss", loss, on_step=True, on_epoch=True, prog_bar=True, batch_size=batch.targets.size(0))
         return loss
+
+    def on_after_backward(self):
+        total_norm = 0.0
+        for name, param in self.named_parameters():
+            if param.grad is not None:
+                total_norm += param.grad.data.norm(2).item() ** 2
+        total_norm = total_norm ** 0.5
+        self.log("grad_norm", total_norm, on_step=True, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self):
         return (
@@ -174,7 +184,17 @@ class LibriSpeechRNNTModule(LightningModule):
         return self._step(batch, batch_idx, "train")
 
     def validation_step(self, batch, batch_idx):
-        return self._step(batch, batch_idx, "val")
+        loss = self._step(batch, batch_idx, "val")
+        self.validation_step_outputs.append(loss.detach())
+        return loss
+    
+    def on_validation_epoch_end(self):
+        if self.validation_step_outputs:
+            avg_loss = torch.mean(torch.stack(self.validation_step_outputs))
+            self.log("Losses/val_loss", avg_loss, prog_bar=True)
+            self.validation_step_outputs.clear()
+        else:
+            self.log("Losses/val_loss", 0.0)
 
     def test_step(self, batch_tuple, batch_idx):
         return self._step(batch_tuple[0], batch_idx, "test")
