@@ -5,7 +5,8 @@ import os
 import sys
 from dataclasses import dataclass, field
 from itertools import chain
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple, Union
+from collections import defaultdict
 
 import datasets
 import evaluate
@@ -25,7 +26,8 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase, BatchEncoding
+from transformers.data.data_collator import _torch_collate_batch
 from dotenv import load_dotenv
 
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
@@ -34,6 +36,126 @@ logger = logging.getLogger(__name__)
 
 load_dotenv("../.env")
 WANDB_KEY = os.getenv("WANDB_TOKEN")
+
+@dataclass
+class DataCollatorForTextInfilling:
+    tokenizer: PreTrainedTokenizerBase
+    mlm_probability: float = 0.15
+    poisson_lambda: float = 3.0
+    pad_to_multiple_of: Optional[int] = None
+
+    def __post_init__(self):
+        if self.tokenizer.mask_token is None:
+            raise ValueError
+
+    def __call__(self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
+                 ) -> Dict[str, torch.Tensor]:
+        # Handle dict or lists with proper padding and conversion to tensor.
+        if isinstance(examples[0], (dict, BatchEncoding)):
+            batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
+        else:
+            batch = {"input_ids": _torch_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)}
+
+        # If special token mask has been preprocessed, pop it from the dict.
+        special_tokens_mask = batch.pop("special_tokens_mask", None)
+
+        batch["decoder_input_ids"] = self.shift_tokens_right(batch["input_ids"])
+
+        batch["input_ids"], batch["labels"] = self.mask_tokens(
+            batch["input_ids"], special_tokens_mask=special_tokens_mask
+        )
+
+        return batch
+
+    def shift_tokens_right(self, inputs):
+        shifted_inputs = torch.roll(inputs, 1, dims=-1)
+        shifted_inputs[:, 0] = self.tokenizer.eos_token_id
+
+        # replace eos tokens at the end of sequences with pad tokens
+        end_with_eos = (shifted_inputs[:, -1] == self.tokenizer.eos_token_id)
+        shifted_inputs[end_with_eos, -1] = self.tokenizer.pad_token_id
+
+        # find positions where token is eos and its following token is a padding token
+        last_eos_indices = torch.where(
+            (shifted_inputs[:, :-1] == self.tokenizer.eos_token_id) &
+            (shifted_inputs[:, 1:] == self.tokenizer.pad_token_id)
+        )
+
+        shifted_inputs[last_eos_indices] = self.tokenizer.pad_token_id
+        return shifted_inputs
+
+    def mask_tokens(self,
+                    inputs: torch.Tensor,
+                    special_tokens_mask: Optional[torch.Tensor] = None
+                    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        labels = inputs.clone()
+
+        if special_tokens_mask is None:
+            special_tokens_mask = [
+                self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
+            ]
+            special_tokens_mask = torch.tensor(special_tokens_mask, dtype=torch.bool)
+        else:
+            special_tokens_mask = special_tokens_mask.bool()
+
+        # determine how many tokens we need to mask in total
+        is_token = ~(inputs == self.tokenizer.pad_token_id) & ~special_tokens_mask
+        num_to_mask = int(math.ceil(is_token.float().sum() * self.mlm_probability))
+
+        if num_to_mask == 0:
+            return inputs, labels
+
+        # generate a sufficient number of span lengths
+        poisson_distribution = torch.distributions.Poisson(rate=self.poisson_lambda)
+        lengths = poisson_distribution.sample(sample_shape=(num_to_mask,))
+        while torch.cumsum(lengths, 0)[-1] < num_to_mask:
+            lengths = torch.cat([lengths, poisson_distribution.sample(sample_shape=(num_to_mask,))])
+
+        # remove all spans of length 0
+        # Note that BART inserts additional mask tokens where length == 0,
+        # which we do not implement for now as it adds additional complexity
+        lengths = lengths[lengths > 0]
+
+        # trim to about num_to_mask tokens
+        idx = torch.argmin(torch.abs(torch.cumsum(lengths, 0) - num_to_mask)) + 1
+        lengths = lengths[:idx + 1]
+
+        # select span start indices
+        token_indices = is_token.nonzero(as_tuple=False)
+        span_starts = torch.randperm(token_indices.shape[0])[:lengths.shape[0]]
+
+        # prepare mask
+        masked_indices = token_indices[span_starts]
+        mask = torch.full_like(inputs, fill_value=False)
+
+        # mask span start indices
+        for mi in masked_indices:
+            mask[tuple(mi)] = True
+        lengths -= 1
+
+        # fill up spans
+        max_index = inputs.shape[1] - 1
+        remaining = (lengths > 0) & (masked_indices[:, 1] < max_index)
+        while torch.any(remaining):
+            masked_indices[remaining, 1] += 1
+            for mi in masked_indices:
+                mask[tuple(mi)] = True
+            lengths -= 1
+            remaining = (lengths > 0) & (masked_indices[:, 1] < max_index)
+
+        # place the mask tokens
+        mask[special_tokens_mask] = False
+        inputs[mask.bool()] = self.tokenizer.mask_token_id
+        labels[~mask.bool()] = -100
+
+        # remove mask tokens that are not starts of spans
+        to_remove = mask.bool() & mask.bool().roll(1, 1)
+        new_inputs = torch.full_like(inputs, fill_value=self.tokenizer.pad_token_id)
+        for i, example in enumerate(torch.split(inputs, split_size_or_sections=1, dim=0)):
+            new_example = example[0][~to_remove[i]]
+            new_inputs[i, 0:new_example.shape[0]] = new_example
+
+        return new_inputs, labels
 
 @dataclass
 class DataCollatorForDenoisingTasks:
@@ -319,6 +441,15 @@ class DataTrainingArguments:
         },
     )
     streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
+    data_collator: str = field(
+        default="Not given",
+        metadata={
+            "help": (
+                "The data collator to be used for training. It can be one of the following: "
+                "'text_infilling', 'denoising'."
+            )
+        },
+    )
     wandb_project: Optional[str] = field(
         default=None,
         metadata={
@@ -364,6 +495,7 @@ def main():
         f"bs{training_args.per_device_train_batch_size}_"
         f"lr{training_args.learning_rate}_"
         f"ep{training_args.num_train_epochs}_"
+        f"dc-{data_args.data_collator}_"
         f"mlm{data_args.mlm_probability}_"
         f"max_seqL{data_args.max_seq_length}"
     )
@@ -573,12 +705,21 @@ def main():
             preds = preds[mask]
             return metric.compute(predictions=preds, references=labels)
 
-    pad_to_multiple_of_8 = data_args.line_by_line and training_args.fp16 and not data_args.pad_to_max_length
-    data_collator = DataCollatorForDenoisingTasks(
-        tokenizer=tokenizer,
-        mask_ratio=data_args.mlm_probability,
-        pad_to_multiple_of=8 if pad_to_multiple_of_8 else None,
-    )
+    pad_to_multiple_of_8 = data_args.pad_to_max_length
+    if data_args.data_collator == "text_infilling":
+        data_collator = DataCollatorForTextInfilling(
+            tokenizer=tokenizer,
+            mlm_probability=data_args.mlm_probability,
+            pad_to_multiple_of=8 if pad_to_multiple_of_8 else None,
+        )
+    elif data_args.data_collator == "denoising":
+        data_collator = DataCollatorForDenoisingTasks(
+            tokenizer=tokenizer,
+            mask_ratio=data_args.mlm_probability,
+            pad_to_multiple_of=8 if pad_to_multiple_of_8 else 0,
+        )
+    else: 
+        raise ValueError(f"Unknown data collator: {data_args.data_collator}")
 
     logger.warning("Data collator initialized with mask ratio: %s", data_args.mlm_probability)
     # sample_dataset = None
