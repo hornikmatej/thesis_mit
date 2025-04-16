@@ -716,7 +716,7 @@ def main():
         data_collator = DataCollatorForDenoisingTasks(
             tokenizer=tokenizer,
             mask_ratio=data_args.mlm_probability,
-            pad_to_multiple_of=8 if pad_to_multiple_of_8 else 0,
+            pad_to_multiple_of=8 if pad_to_multiple_of_8 else None,
         )
     else: 
         raise ValueError(f"Unknown data collator: {data_args.data_collator}")
