@@ -173,8 +173,7 @@ scripts/sync_to_remote2.sh
 # preprocessed datasets
 preprocessed_dataset*
 
-ctc/wav2vec2-large-lv60-librispeech-clean-100h/*
-ctc/wav2vec2-base/*
+ctc/wav2vec2-base*/
 .vscode/
 
 # sraacky pre rnnt
