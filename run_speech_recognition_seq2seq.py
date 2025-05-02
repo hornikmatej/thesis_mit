@@ -133,7 +133,6 @@ def main():
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=data_args.train_split_name,
-                cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 trust_remote_code=model_args.trust_remote_code,
                 num_proc=(
@@ -150,7 +149,6 @@ def main():
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=data_args.eval_split_name,
-                cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 trust_remote_code=model_args.trust_remote_code,
                 num_proc=(
@@ -166,7 +164,6 @@ def main():
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=data_args.test_split_name,
-                cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 trust_remote_code=model_args.trust_remote_code,
                 num_proc=(
@@ -822,8 +819,8 @@ def main():
         else:
             kwargs["dataset"] = data_args.dataset_name
 
-    # if training_args.push_to_hub:
-    #     trainer.push_to_hub(**kwargs)
+    if training_args.push_to_hub:
+        trainer.push_to_hub(**kwargs)
     # else:
     #     trainer.create_model_card(**kwargs)
 
