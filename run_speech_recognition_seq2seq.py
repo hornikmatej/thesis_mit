@@ -212,9 +212,24 @@ def main():
         trust_remote_code=model_args.trust_remote_code,
     )
 
-    # SpecAugment for whisper models
-    if getattr(config, "model_type", None) == "whisper":
-        config.update({"apply_spec_augment": model_args.apply_spec_augment})
+    if model_args.apply_spec_augment:
+        # Handle different config structures for different model types
+        if hasattr(config, "encoder"):
+            # Direct encoder attribute (e.g., Wav2Vec2)
+            encoder_config = config.encoder
+        else:
+            raise ValueError("Could not find encoder config")
+        
+        # Set SpecAugment parameters
+        encoder_config.apply_spec_augment = True
+        encoder_config.mask_time_prob = model_args.mask_time_prob
+        encoder_config.mask_time_length = model_args.mask_time_length
+        encoder_config.mask_time_min_masks = model_args.mask_time_min_masks
+        encoder_config.mask_feature_prob = model_args.mask_feature_prob
+        encoder_config.mask_feature_length = model_args.mask_feature_length
+        encoder_config.mask_feature_min_masks = model_args.mask_feature_min_masks
+        
+        logger.warning(f"Applied SpecAugment with mask_time_prob={model_args.mask_time_prob}")
 
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         (
@@ -251,6 +266,22 @@ def main():
         raise ValueError(
             "Make sure that `config.decoder_start_token_id` is correctly defined"
         )
+
+    if model_args.apply_spec_augment:
+        # model.config.apply_spec_augment = True
+        # model.config.mask_time_prob = model_args.mask_time_prob
+        # model.config.mask_time_length = model_args.mask_time_length
+        # model.config.mask_time_min_masks = model_args.mask_time_min_masks
+        # model.config.mask_feature_prob = model_args.mask_feature_prob
+        # model.config.mask_feature_length = model_args.mask_feature_length
+        # model.config.mask_feature_min_masks = model_args.mask_feature_min_masks
+        logger.warning(f"Applied SpecAugment with \
+                    {model_args.mask_time_prob=}, \
+                    {model_args.mask_time_length=}, \
+                    {model_args.mask_time_min_masks=}, \
+                    {model_args.mask_feature_prob=}, \
+                    {model_args.mask_feature_length=}, \
+                    {model_args.mask_feature_min_masks=}")
 
     num_params_encoder, num_params_decoder, num_params_total = count_parameters(model)
     logger.warning(

@@ -97,6 +97,56 @@ class ModelArguments:
             "help": "Whether to apply *SpecAugment* data augmentation to the input features. This is currently only relevant for Wav2Vec2, HuBERT, WavLM and Whisper models."
         },
     )
+    mask_time_prob: float = field(
+        default=0.15,
+        metadata={
+            "help": (
+                "Probability of masking each feature vector in the input sequence. This is only used if "
+                "`apply_spec_augment` is True."
+            )
+        },
+    )
+    mask_time_length: int = field(
+        default=20,
+        metadata={
+            "help": (
+                "Length of each mask in number of feature vectors. This is only used if `apply_spec_augment` is True."
+            )
+        },
+    )
+    mask_time_min_masks: int = field(
+        default=2,
+        metadata={
+            "help": (
+                "Minimum number of masks to apply. This is only used if `apply_spec_augment` is True."
+            )
+        },
+    )
+    mask_feature_prob: float = field(
+        default=0.1,
+        metadata={
+            "help": (
+                "Probability of masking each feature vector in the input sequence. This is only used if "
+                "`apply_spec_augment` is True."
+            )
+        },
+    )
+    mask_feature_length: int = field(
+        default=20,
+        metadata={
+            "help": (
+                "Length of each mask in number of feature vectors. This is only used if `apply_spec_augment` is True."
+            )
+        },
+    )
+    mask_feature_min_masks: int = field(
+        default=1,
+        metadata={
+            "help": (
+                "Minimum number of masks to apply. This is only used if `apply_spec_augment` is True."
+            )
+        },
+    )
     use_lora_adapter: bool = field(
         default=False,
         metadata={
@@ -133,6 +183,7 @@ class ModelArguments:
             "help": "Whether to use custom optimizer."
         },
     )
+
 
 @dataclass
 class DataTrainingArguments:
