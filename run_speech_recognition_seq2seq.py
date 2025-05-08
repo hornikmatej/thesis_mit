@@ -48,6 +48,7 @@ from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from config import get_settings
 from src.dataclass_args import ModelArguments, DataTrainingArguments
 from src.custom_trainer import DebugSeq2SeqTrainer
+from src.mutli_opt_trainer import MultiOptSeq2SeqTrainer
 from src.data_collator import DataCollatorSpeechSeq2SeqWithPadding
 from src.logger_setup import setup_logger
 from src.utils import count_parameters, count_all_parameters, ProfCallback
@@ -555,9 +556,25 @@ def main():
     processor = AutoProcessor.from_pretrained(training_args.output_dir)
 
     # 10. Define data collator
+
+    # --- Explicitly get IDs from model config and tokenizer ---
+    if model.config.decoder_start_token_id is None:
+        raise ValueError("Model config must have decoder_start_token_id")
+    decoder_start_token_id = model.config.decoder_start_token_id
+
+    # Pad token ID is often defined in tokenizer's config or directly on tokenizer
+    pad_token_id = processor.tokenizer.pad_token_id
+    if pad_token_id is None:
+        # Fallback to model config if tokenizer doesn't have it explicitly
+        if model.config.pad_token_id is None:
+            raise ValueError("Could not find pad_token_id in tokenizer or model config.")
+        pad_token_id = model.config.pad_token_id
+
+    # 10. Define data collator
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(
         processor=processor,
-        decoder_start_token_id=model.config.decoder_start_token_id,
+        decoder_start_token_id=decoder_start_token_id, # Pass the fetched ID
+        pad_token_id=pad_token_id,                     # Pass the fetched ID
         forward_attention_mask=forward_attention_mask,
         log_level=training_args.get_process_log_level(),
         debug_output_dir=os.path.join(training_args.output_dir, "debug"),
@@ -592,19 +609,35 @@ def main():
         logger.warning(model.print_trainable_parameters())
 
     # 11. Initialize Trainer
-    trainer = DebugSeq2SeqTrainer(
-        model=model,
-        actual_tokenizer=tokenizer,
-        args=training_args,
-        train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
-        eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-        processing_class=feature_extractor,
-        data_collator=data_collator,
-        compute_metrics=(
-            compute_metrics if training_args.predict_with_generate else None
-        ),
-        debug_dir=os.path.join(training_args.output_dir, "debug"),
-    )
+    if model_args.custom_opt:
+        logger.warning("Using custom optimizer")
+        trainer = MultiOptSeq2SeqTrainer(
+            model=model,
+            actual_tokenizer=tokenizer,
+            args=training_args,
+            train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
+            eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
+            processing_class=feature_extractor,
+            data_collator=data_collator,
+            compute_metrics=(
+                compute_metrics if training_args.predict_with_generate else None
+            ),
+            debug_dir=os.path.join(training_args.output_dir, "debug"),
+        )
+    else:
+        trainer = DebugSeq2SeqTrainer(
+            model=model,
+            actual_tokenizer=tokenizer,
+            args=training_args,
+            train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
+            eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
+            processing_class=feature_extractor,
+            data_collator=data_collator,
+            compute_metrics=(
+                compute_metrics if training_args.predict_with_generate else None
+            ),
+            debug_dir=os.path.join(training_args.output_dir, "debug"),
+        )
 
     # 12. Training
     if training_args.do_train:

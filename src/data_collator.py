@@ -10,6 +10,7 @@ import numpy as np
 import io
 import wandb
 import soundfile as sf
+from transformers.models.whisper.modeling_whisper import shift_tokens_right
 
 logger_collator = logging.getLogger(__name__)
 
@@ -112,6 +113,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         self,
         processor: Any,
         decoder_start_token_id: int,
+        pad_token_id: int,            # Accept this explicitly
         forward_attention_mask: bool,
         log_level: int,
         debug_output_dir: str = "debug_output",
@@ -119,6 +121,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     ):
         self.processor = processor
         self.decoder_start_token_id = decoder_start_token_id
+        self.pad_token_id = pad_token_id
         self.forward_attention_mask = forward_attention_mask
         self.debug_output_dir = debug_output_dir
         self.sclite_path = sclite_path
@@ -126,6 +129,14 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         self.log_level = log_level
         # Create debug output directory if it doesn't exist
         os.makedirs(debug_output_dir, exist_ok=True)
+        if not hasattr(self.processor, "tokenizer") or not hasattr(
+            self.processor, "feature_extractor"
+        ):
+            raise ValueError(
+                "Processor must have both a tokenizer and a feature extractor."
+            )
+        # Removed the complex ID detection logic here
+
 
     def __call__(
         self, features: List[Dict[str, Union[List[int], torch.Tensor]]]
@@ -147,23 +158,34 @@ class DataCollatorSpeechSeq2SeqWithPadding:
             input_features, return_tensors="pt"
         )
 
-        if self.forward_attention_mask:
-            batch["attention_mask"] = torch.LongTensor(
-                [feature["attention_mask"] for feature in features]
-            )
-
         labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="pt")
 
-        # replace padding with -100 to ignore loss correctly
+        # Prepare decoder_input_ids
+        decoder_input_ids = shift_tokens_right(
+            labels_batch["input_ids"], self.pad_token_id, self.decoder_start_token_id
+        )
+        batch["decoder_input_ids"] = decoder_input_ids
+
+        # Prepare labels
         labels = labels_batch["input_ids"].masked_fill(
             labels_batch.attention_mask.ne(1), -100
         )
-
-        # remove the start token from the labels
-        # if (labels[:, 0] == self.decoder_start_token_id).all().cpu().item():
-        #     labels = labels[:, 1:]
-
+        # if (labels[:, 0] == self.decoder_start_token_id).all().item():
+        #      labels = labels[:, 1:]
         batch["labels"] = labels
+
+        if self.forward_attention_mask:
+            # Ensure 'attention_mask' key exists in features if needed here
+            # Or handle padding appropriately based on feature_extractor output
+             try:
+                batch["attention_mask"] = torch.LongTensor(
+                    [feature["attention_mask"] for feature in features]
+                 )
+             except KeyError:
+                 logger_collator.warning("forward_attention_mask=True but 'attention_mask' not found in features. Input attention mask might be missing.")
+                 # Decide how to handle this: maybe pass None, or rely on feature_extractor's padding mask?
+                 # For now, let's assume the processor's padding handles the input attention mask if needed.
+                 pass # Rely on batch["attention_mask"] created by feature_extractor.pad if it exists
 
         if self.log_level == logging.DEBUG:
             debug_info = self.debug_sample(batch, features, every_n_batches=100)

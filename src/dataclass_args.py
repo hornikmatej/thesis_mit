@@ -127,6 +127,12 @@ class ModelArguments:
             "help": "LoRA initialization method."
         },
     )
+    custom_opt: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether to use custom optimizer."
+        },
+    )
 
 @dataclass
 class DataTrainingArguments:

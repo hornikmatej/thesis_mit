@@ -35,4 +35,4 @@ CUDA_VISIBLE_DEVICES="0" python run_speech_recognition_seq2seq.py \
     --report_to="wandb" \
 	--sclite_path="/home/azureuser/media-disk/mh_dp/SCTK/bin/sclite" \
 	--wandb_project="seq2seq_encoder-decoder_fe" \
-	--cache_dir="/home/azureuser/media-disk/mh_dp/preprocessed_dataset_voxpopuli" \
+	--cache_dir="/home/azureuser/media-disk/mh_dp/preprocessed_dataset_voxpopuli" \	
