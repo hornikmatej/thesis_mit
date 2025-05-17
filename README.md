@@ -94,3 +94,5 @@ If you use code or findings from this thesis in your research, please consider c
   type         = {Master's Thesis},
   note         = {Online. Available at: \url{https://www.vut.cz/en/students/final-thesis/detail/164401} and code at \url{https://github.com/hornikmatej/thesis_mit}}
 }
+```
+✌️
