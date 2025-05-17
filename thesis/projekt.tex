@@ -1,0 +1,301 @@
+
+% \documentclass[english]{fitthesis} 
+\documentclass[english,zadani]{fitthesis}
+%---rm---------------
+\renewcommand{\rmdefault}{lmr}%zavede Latin Modern Roman jako rm / set Latin Modern Roman as rm
+%---sf---------------
+\renewcommand{\sfdefault}{qhv}%zavede TeX Gyre Heros jako sf
+%---tt------------
+\renewcommand{\ttdefault}{lmtt}% zavede Latin Modern tt jako tt
+
+% disables function of the template which replaces quotation marks
+% to avoid unnecessary replacements in the API descriptions etc.
+\csdoublequotesoff
+
+\usepackage{url}
+
+% =======================================================================
+% "hyperref" package create clickable links in pdf if you are using pdflatex.
+% Problem is that this package have to be introduced as the last one so it 
+% can not be placed in the template file.
+\ifWis
+\ifx\pdfoutput\undefined % we are not using pdflatex
+\else
+  \usepackage{color}
+  \usepackage[unicode,colorlinks,hyperindex,plainpages=false,pdftex]{hyperref}
+  \definecolor{hrcolor-ref}{RGB}{223,52,30}
+  \definecolor{hrcolor-cite}{HTML}{2F8F00}
+  \definecolor{hrcolor-urls}{HTML}{092EAB}
+  \hypersetup{
+	linkcolor=hrcolor-ref,
+	citecolor=hrcolor-cite,
+	filecolor=magenta,
+	urlcolor=hrcolor-urls
+  }
+  \def\pdfBorderAttrs{/Border [0 0 0] }  % bez okrajů kolem odkazů / without margins around links
+  \pdfcompresslevel=9
+\fi
+\else % pro tisk budou odkazy, na které se dá klikat, černé / for the print clickable links will be black
+\ifx\pdfoutput\undefined %  we are not using pdflatex
+\else
+  \usepackage{color}
+  \usepackage[unicode,colorlinks,hyperindex,plainpages=false,pdftex,urlcolor=black,linkcolor=black,citecolor=black]{hyperref}
+  \definecolor{links}{rgb}{0,0,0}
+  \definecolor{anchors}{rgb}{0,0,0}
+  \def\AnchorColor{anchors}
+  \def\LinkColor{links}
+  \def\pdfBorderAttrs{/Border [0 0 0] } %  without margins around links
+  \pdfcompresslevel=9
+\fi
+\fi
+% This solves the problems with links which leads after the picture
+\usepackage[all]{hypcap}
+\usepackage{listings}
+\usepackage{fvextra}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\DefineVerbatimEnvironment{Verbatim}{Verbatim}{breaklines=true, breakanywhere=true}
+
+
+% Information about the thesis
+%---------------------------------------------------------------------------
+\projectinfo{
+  project={DP},
+  year={2025},
+  date=\today,
+  %thesis title
+  title.cs={Efektivní trénování neuronových sítí pro automatické rozpoznávání řeči},  % thesis title in czech language
+  title.en={Effective Training of Neural Networks for Automatic Speech Recognition}, % thesis title in english
+  %Autor / Author
+  author.name={Matej},   %  author name
+  author.surname={Horník},   %  author surname 
+  %author.title.p={Bc.}, % title before the name (optional)
+  %author.title.a={Ph.D.}, % title after the name (optional)
+  %Ustav / Department
+  department={UPGM}, % fill in appropriate abbreviation of the department according to assignment: UPSY/UIFS/UITS/UPGM
+  % supervisor
+  supervisor.name={Alexander},   %  supervisor name 
+  supervisor.surname={Polok},   %  supervisor surname
+  supervisor.title.p={Ing.},   % title before the name (optional)
+  supervisor.title.a={},    % title after the name (optional)
+  % keywords
+keywords.cs={automatické rozpoznávanie reči, hlboké učenie, transformer modely, modely kódovač-dekóder, predtrénované modely, parametricky efektívne doladenie, PEFT, LoRA, DoRA, adaptéry, inicializačné stratégie, Wav2Vec2, BART, slovná chybovosť, WER, učenie typu sekvencia-na-sekvenciu, učenie s vlastným dohľadom, krížová pozornosť, doladenie, LibriSpeech, VoxPopuli, výpočtová efektivita, neurónové siete, jazykové modely
+}, % keywords in czech or slovak language
+keywords.en={automatic speech recognition, deep learning, transformer models, encoder-decoder models, pre-trained models, parameter-efficient fine-tuning, PEFT, LoRA, DoRA, adapter layers, initialization strategies, Wav2Vec2, BART, word error rate, WER, sequence-to-sequence learning, self-supervised learning, cross-attention, fine-tuning, LibriSpeech, VoxPopuli, computational efficiency, neural networks, language models}, % keywords in english
+  % Abstract
+  abstract.cs={Táto diplomová práca sa zaoberá zlepšením efektivity trénovania a výkonu modelov kodér-dekodér pre automatické rozpoznávanie reči (ASR) s využitím transformer modelov. Skúmal sa vplyv inicializačných stratégií s predtrénovanými komponentmi (Wav2Vec2, BART), úloha konvolučných adaptérov a metódy parametricky efektívneho doladenia (PEFT) ako LoRA a DoRA. Experimenty na dátových sadách LibriSpeech a VoxPopuli potvrdili, že plná predténovaná inicializácia je kľúčová pre najlepšiu slovnú chybovosť (WER) a konvergenciu. Optimálny počet adaptérov zlepšil výkon, zatiaľ čo PEFT (najmä LoRA) výrazne znížilo počet trénovateľných parametrov pri zachovaní porovnateľnej presnosti. Predtrénovanie kodéru na dátach cieľovej domény bolo prínosné a architektúra kodér-dekodér prekonala CTC model v presnosti. Optimalizovaná konfigurácia dosiahla slovnú chybovosť 8.85\% na testovacej sade VoxPopuli English\textsuperscript{\ref{hflink}}. Tieto zistenia poskytujú praktické poznatky pre efektívny tréning ASR.
+},
+  abstract.en={This master's thesis focuses on improving the training efficiency and performance of encoder-decoder transformer models for Automatic Speech Recognition (ASR). It investigates the impact of initialization strategies using pre-trained components (Wav2Vec2, BART), the role of convolutional adapters, and Parameter-Efficient Fine-tuning (PEFT) methods like LoRA and DoRA. Experiments on LibriSpeech and VoxPopuli datasets confirmed that full pre-trained initialization is crucial for best Word Error Rate (WER) and convergence. An optimal number of adapters improved performance, while PEFT (especially LoRA) significantly reduced trainable parameters with comparable accuracy. Domain-specific encoder pre-training proved beneficial, and the encoder-decoder model outperformed a CTC baseline in accuracy. Notably, an optimized configuration achieved a Word Error Rate of 8.85\% on the VoxPopuli English test set\footnote{\url{https://huggingface.co/matejhornik/wav2vec2-base_bart-base_voxpopuli-en}\label{hflink}}. These findings offer practical insights for efficient ASR training.}, 
+  % Declaration in en
+  declaration={I declare that I have prepared this master's thesis independently under the guidance of Ing. Alexander Polok. During the preparation of the textual parts, specifically for refining language, generating suggestions, and proofreading, I utilized assistance from generative language models. I have cited all literary sources, publications, and other resources used.},
+  %  Acknowledgement
+  acknowledgment={I would like to express my sincere gratitude to my supervisor, Ing. Alexander Polok, for his valuable guidance, insightful advice, and support throughout the development of this thesis.},
+  % Extended abstract (approximately 3 standard pages) - can be defined here or below
+  %extendedabstract={Do tohoto odstavce bude zapsán rozšířený výtah (abstrakt) práce v českém (slovenském) jazyce.},
+  %extabstract.odd={true}, % Začít rozšířený abstrakt na liché stránce? / Should extended abstract start on the odd page?
+  %faculty={FIT}, % FIT/FEKT/FSI/FA/FCH/FP/FAST/FAVU/USI/DEF
+  faculty.cs={Fakulta informačních technologií}, 
+  faculty.en={Faculty of Information Technology}, % Faculty in English - for use of this entry select DEF above
+  % department.cs={Ústav matematiky}, % Ústav v češtině - pro využití této položky výše zvolte ústav DEF nebo jej zakomentujte / Department in Czech - for use of this entry select DEF above or comment it out
+  % department.en={Institute of Mathematics} % Ústav v angličtině - pro využití této položky výše zvolte ústav DEF nebo jej zakomentujte / Department in English - for use of this entry select DEF above or comment it out
+}
+
+\extendedabstract{
+Táto diplomová práca sa zameriava na optimalizáciu tréningového procesu a zlepšenie výkonnosti modelov hlbokého učenia pre automatické rozpoznávanie reči (ASR), špecificky sa sústredí na architektúry typu kodér-dekodér založené na transformeroch. Súčasné najvýkonnejšie ASR modely, často postavené na architektúre transformer, dosahujú vynikajúce výsledky, merané nízkou slovnou chybovosťou (Word Error Rate — WER), avšak ich tréning na rozsiahlych dátových sadách si vyžaduje enormné výpočtové zdroje. Táto práca skúma stratégie, ako zmierniť túto výpočtovú náročnosť a zároveň zlepšiť presnosť modelov pre špecifické úlohy ASR. Hlavným prístupom je využitie a kombinácia vopred predtrénovaných komponentov – kodéra, ktorý sa naučil robustné reprezentácie zvuku, a dekodéra, predtrénovaného na úlohách jazykového modelovania. Cieľom práce je systematicky preskúmať rôzne inicializačné stratégie, význam prepojovacích mechanizmov medzi kodérom a dekodérom a aplikáciu metód parametricky efektívneho doladenia (Parameter-Efficient Fine-tuning — PEFT) na zefektívnenie procesu adaptácie modelu.
+
+Teoretická časť stručne predstavuje tradičné metódy spracovania reči a ich obmedzenia, následne sa podrobne venuje základom hlbokého učenia pre sekvenčné dáta, s ťažiskom na architektúru Transformer. Detailne rozoberá kľúčové komponenty ako mechanizmus pozornosti, embeddings, pozičné kódovanie a tokenizáciu (BPE). Opisuje funkcie kodérovej a dekodérovej časti, vrátane ich špecifických mechanizmov. Práca ďalej preberá dominantné end-to-end ASR architektúry: Connectionist Temporal Classification (CTC), RNN Transducer (RNN-T) a Attention-based Encoder-Decoder (AED), pričom porovnáva ich princípy a vlastnosti. V kontexte týchto architektúr predstavuje konkrétne predtrénované modely: akustický model Wav2Vec 2.0 a jazykový model BART, ktoré slúžia ako základné stavebné bloky pre experimenty. Zároveň sú predstavené metódy PEFT, ktoré umožňujú adaptovať rozsiahle modely s trénovaním len malého zlomku parametrov, s dôrazom na LoRA (Low-Rank Adaptation) a DoRA (Weight-Decomposed Low-Rank Adaptation).
+
+Experimentálna časť práce sa venuje systematickému vyhodnoteniu navrhovaných prístupov na anglických ASR dátových sadách LibriSpeech (`train-clean-100`) a VoxPopuli (anglická časť). Základným modelom je kombinácia predtrénovaného kodéra Wav2Vec2-base a dekodéra BART-base, hodnoteným metrikou WER. Prvý experiment potvrdil, že inicializácia s oboma predtrénovanými časťami dosahuje najlepšiu WER (8.9\% LibriSpeech, 10.6\% VoxPopuli) a najrýchlejšiu konvergenciu, pričom predtrénovaný kodér má väčší vplyv. Druhý experiment ukázal, že zmrazenie príznakového extraktora v kodéri neškodí výkonu a mierne znižuje výpočtovú náročnosť, preto bol v ďalších experimentoch zmrazený. Tretí experiment identifikoval optimálny počet (2-3) konvolučných adaptačných vrstiev medzi kodérom a dekodérom pre zlepšenie WER (najlepšie 8.08\% LibriSpeech, 10.65\% VoxPopuli) bez výrazného vplyvu na rýchlosť tréningu.
+
+Štvrtý a piaty experiment hodnotili metódy PEFT. LoRA s vhodne zvoleným rankom a škálovacím faktorom dosiahla výkon blízky plnému doladeniu (8.67\% WER LibriSpeech) s výrazne menej trénovateľnými parametrami, aj keď s pomalším tréningovým krokom. DoRA dosiahla mierne horšiu WER a bola výrazne pomalšia ako LoRA v tomto nastavení. Šiesty experiment ukázal, že použitie kodéra Wav2Vec2 predtrénovaného priamo na cieľových dátach (anglický VoxPopuli) signifikantne zlepšilo výsledky na VoxPopuli (WER 9.88\%). Finálne optimalizované trénovanie tejto konfigurácie s rozsiahlejšími parametrami doladenia a technikou SpecAugment ďalej znížilo WER na anglickom VoxPopuli na 8.85\%. Dodatočné predtrénovanie dekodéra na cieľových textových dátach však neprinieslo zlepšenie. Posledný experiment porovnal model kodér-dekodér s baseline CTC modelom, pričom kodér-dekodér dosiahol výrazne lepšiu WER (napr. 8.26\% vs 11.87\% LibriSpeech), aj keď bol pomalší.
+
+Záverom, práca potvrdila kľúčový význam využitia predtrénovaných komponentov, prínos konvolučných adaptérov a efektivitu PEFT metód (najmä LoRA) pre tréning ASR modelov typu kodér-dekodér. Zdôraznila dôležitosť doménovej špecificity predtréningu kodéra a vyššiu presnosť architektúry kodér-dekodér oproti CTC. Výsledky poskytujú praktické odporúčania pre efektívnejšie trénovanie a nasadzovanie moderných ASR systémov.
+}
+%  Should extended abstract start on the odd page?
+%\extabstractodd{true}
+
+% setting the length of a block with a thesis title for adjusting a line break - can be defined here or above
+%\titlelength{14.5cm}
+% setting the length of a block with a second thesis title for adjusting a line break - can be defined here or above
+%\sectitlelength{14.5cm}
+% setting the length of a block with a thesis title above declaration for adjusting a line break - here or above
+%\dectitlelength{14.5cm}
+
+% solves first/last row of the paragraph on the previous/next page
+\clubpenalty=10000
+\widowpenalty=10000
+
+% checklist
+\newlist{checklist}{itemize}{1}
+\setlist[checklist]{label=$\square$}
+
+
+% Compilation piecewise (faster, but not all parts in preview will be up-to-date)
+% For more information see https://www.overleaf.com/learn/latex/Multi-file_LaTeX_projects
+% \usepackage{subfiles}
+
+% If you do not want enlarged spacing for filling of the pages in case of duplex printing, uncomment the following line
+% \raggedbottom
+
+\begin{document}
+  % Typesetting of the title pages
+  % ----------------------------------------------
+  \maketitle
+  % Obsah
+  % ----------------------------------------------
+  \setlength{\parskip}{0pt}
+
+  \setcounter{tocdepth}{1}\setcounter{page}{2}
+
+  {\hypersetup{hidelinks}\tableofcontents}
+  
+  % List of figures and list of tables (if the thesis contains a lot of pictures, it is good)
+  \ifczech
+    \renewcommand\listfigurename{Seznam obrázků}
+  \fi
+  \ifslovak
+    \renewcommand\listfigurename{Zoznam obrázkov}
+  \fi
+  {\hypersetup{hidelinks}\listoffigures}
+  
+  \ifczech
+    \renewcommand\listtablename{Seznam tabulek}
+  \fi
+  \ifslovak
+    \renewcommand\listtablename{Zoznam tabuliek}
+  \fi
+  % {\hypersetup{hidelinks}\listoftables}
+
+  % Seznam zkratek / List of abbreviations
+  %\ifczech
+  %  \renewcommand*\glossaryname{Seznam zkratek}%
+  %  \renewcommand*\entryname{Zkratka}
+  %  \renewcommand*\descriptionname{Význam}
+  %\fi
+  %\ifslovak
+  %  \renewcommand*\glossaryname{Zoznam skratiek}%
+  %  \renewcommand*\entryname{Skratka}
+  %  \renewcommand*\descriptionname{Význam}
+  %\fi
+  %\ifenglish
+  %  \renewcommand*\glossaryname{List of abbreviations}%
+  %  \renewcommand*\entryname{Abbreviation}
+  %  \renewcommand*\descriptionname{Meaning}
+  %\fi
+  % Definition of abbreviations - referred from the text e.g. \Gls{TF–IDF}
+  %\newglossaryentry{TF–IDF}
+  %{
+  %  name={TF–IDF},
+  %  description={Term Frequency-Inverse Document Frequency}
+  %}
+  % 
+  %\setglossarystyle{superragged}
+  %\printglossaries
+
+
+  \ifODSAZ
+    \setlength{\parskip}{0.5\bigskipamount}
+  \else
+    \setlength{\parskip}{0pt}
+  \fi
+
+  % Skip the page in the two-sided mode
+  \iftwoside
+    \cleardoublepage
+  \fi
+
+  % Thesis text
+  % ----------------------------------------------
+  \ifenglish
+    \input{projekt-01-kapitoly-chapters-en}
+  \else
+    \input{projekt-01-kapitoly-chapters}
+  \fi
+
+  % Bibliography
+  % ----------------------------------------------
+\ifslovak
+  \makeatletter
+  \def\@openbib@code{\addcontentsline{toc}{chapter}{Literatúra}}
+  \makeatother
+  \bibliographystyle{bib-styles/Pysny/skplain}
+\else
+  \ifczech
+    \makeatletter
+    \def\@openbib@code{\addcontentsline{toc}{chapter}{Literatura}}
+    \makeatother
+    \bibliographystyle{bib-styles/Pysny/czplain}
+  \else 
+    \makeatletter
+    \def\@openbib@code{\addcontentsline{toc}{chapter}{Bibliography}}
+    \makeatother
+    \bibliographystyle{bib-styles/Pysny/enplain}
+  %  \bibliographystyle{alpha}
+  \fi
+\fi
+  \begin{flushleft}
+  \bibliography{projekt-20-literatura-bibliography}
+  \end{flushleft}
+
+  % Skip the page in the two-sided mode
+  \iftwoside
+    \cleardoublepage
+  \fi
+
+  % Prilohy / Appendices
+  % ---------------------------------------------
+  \appendix
+\ifczech
+  \renewcommand{\appendixpagename}{Přílohy}
+  \renewcommand{\appendixtocname}{Přílohy}
+  \renewcommand{\appendixname}{Příloha}
+\fi
+\ifslovak
+  \renewcommand{\appendixpagename}{Prílohy}
+  \renewcommand{\appendixtocname}{Prílohy}
+  \renewcommand{\appendixname}{Príloha}
+\fi
+%  \appendixpage
+
+% Skip the page in the two-sided mode
+%\iftwoside
+%  \cleardoublepage
+%\fi
+  
+\ifslovak
+%  \section*{Zoznam príloh}
+%  \addcontentsline{toc}{section}{Zoznam príloh}
+\else
+  \ifczech
+%    \section*{Seznam příloh}
+%    \addcontentsline{toc}{section}{Seznam příloh}
+  \else
+%    \section*{List of Appendices}
+%    \addcontentsline{toc}{section}{List of Appendices}
+  \fi
+\fi
+  \startcontents[chapters]
+  \setlength{\parskip}{0pt} 
+  % list of appendices
+  % \printcontents[chapters]{l}{0}{\setcounter{tocdepth}{2}}
+  
+  \ifODSAZ
+    \setlength{\parskip}{0.5\bigskipamount}
+  \else
+    \setlength{\parskip}{0pt}
+  \fi
+  
+  % vynechani stranky v oboustrannem rezimu
+  \iftwoside
+    \cleardoublepage
+  \fi
+  
+  % Appendices
+  \ifenglish
+    \input{projekt-30-prilohy-appendices-en}
+  \else
+    \input{projekt-30-prilohy-appendices}
+  \fi
+  
+\end{document}

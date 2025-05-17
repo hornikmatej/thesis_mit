@@ -1,0 +1,38 @@
+% This file should be replaced with your file with an appendices (headings below are examples only)
+
+
+
+\chapter{Timing Measurement Methodology}
+\label{app:timing-methodology}
+
+The timing measurements presented in Table~\ref{tab:conv_time} were obtained using the following procedure, implemented in PyTorch (version 2.5.1) and the model implemented with the Hugging Face Transformers (version 4.46.3) library. The goal was to isolate the forward and backward pass time for a single 10-second audio sample, excluding any data loading or other overhead.
+
+\begin{lstlisting}[language=Python, caption=Code used for Time Measurements, basicstyle=\ttfamily\footnotesize, frame=single]
+# Model in training mode
+model.train()
+
+# Warm-up (discarded iterations)
+for _ in range(NUM_WARMUP):
+    outputs = model(input)
+    loss = outputs.loss
+    loss.backward()
+    model.zero_grad()
+
+# Measurement iterations
+for _ in range(NUM_ITERATIONS):
+    start_event = record_start_time() #e.g., torch.cuda.Event
+    
+    outputs = model(input)
+    loss = outputs.loss
+    loss.backward()
+
+    end_event = record_end_time() #e.g., torch.cuda.Event
+    synchronize() # Ensure GPU operations are complete, e.g. torch.cuda.synchronize
+    time_taken = calculate_elapsed_time(start_event, end_event)
+    store(time_taken)
+    model.zero_grad()
+
+# Calculate average and standard deviation of stored times.
+average_time = average(stored_times)
+std_deviation = std_dev(stored_times)
+\end{lstlisting}
