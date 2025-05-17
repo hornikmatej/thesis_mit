@@ -30,7 +30,7 @@ The code includes scripts for model creation, fine-tuning ( leveraging Hugging F
 
 ## Key Outcomes & Model
 
-A key result of this work is a Wav2Vec2-BART (base) model fine-tuned on English VoxPopuli, achieving a **Word Error Rate (WER) of 8.85%** on the test set.
+A result of this work is a Wav2Vec2-BART (base) model fine-tuned on English VoxPopuli, achieving a **Word Error Rate (WER) of 8.85%** on the test set.
 
 [![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Model_Card-matejhornik/wav2vec2--base_bart--base_voxpopuli--en-blue)](https://huggingface.co/matejhornik/wav2vec2-base_bart-base_voxpopuli-en)
 
@@ -45,7 +45,7 @@ This project uses [Poetry](https://python-poetry.org/) for dependency management
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/hornikmatej/thesis_mit.git # Or your actual repo URL
+    git clone https://github.com/hornikmatej/thesis_mit.git
     cd thesis_mit
     ```
 
